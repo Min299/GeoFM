@@ -1,0 +1,45 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# ML / experiment artifacts
+geofm/outputs/checkpoints/*
+geofm/outputs/logs/*
+geofm/outputs/metrics/*
+geofm/outputs/visualizations/*
+geofm/outputs/reports/*
+*.ckpt
+*.pt
+*.pth
+*.onnx
+wandb/
+mlruns/
+
+# Data
+*.tif
+*.tiff
+*.h5
+*.npz
+
+# Keep the empty output dirs tracked
+!geofm/outputs/**/.gitkeep
