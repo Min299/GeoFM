@@ -1,2 +1,10 @@
-# lora.yaml
-# TODO: fill in configuration.
+epochs: 50
+
+batch_size: 16
+
+optimizer:
+  type: adamw
+  lr: 1e-4
+
+scheduler:
+  type: cosine

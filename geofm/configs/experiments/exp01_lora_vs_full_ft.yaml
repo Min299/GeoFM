@@ -1,0 +1,8 @@
+experiment_name: lora_vs_full_ft
+
+tasks:
+  - flood
+
+training_mode: lora
+
+metadata_enabled: false

@@ -1,2 +1,10 @@
-# terramind.yaml
-# TODO: fill in configuration.
+backbone: terramind
+
+freeze_encoder: true
+
+feature_dim: 768
+
+lora:
+  rank: 16
+  alpha: 32
+  dropout: 0.1
