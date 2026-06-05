@@ -8,7 +8,9 @@ No multitasking.
 Architecture:
     TerraMind (backbone)
         ↓
-    LoRA OR Full FT
+    FeatureExtractor [2,5,8,11]
+        ↓
+    LoRA Adapters (if use_lora=True)
         ↓
     UNet Decoder
         ↓
@@ -48,33 +50,165 @@ class FloodModelConfig:
                 self.feature_indices = [2, 5, 8, 11]
 
 
+class LoRAAdapter(nn.Module):
+    """LoRA adapter applied between feature extractor and decoder.
+
+    Applied per feature level [f2, f5, f8, f11].
+    """
+
+    def __init__(self, dim: int = 768, rank: int = 16, alpha: int = 32):
+        super().__init__()
+        self.rank = rank
+        self.alpha = alpha
+
+        # LoRA A: down projection
+        self.lora_A = nn.Linear(dim, rank, bias=False)
+        # LoRA B: up projection
+        self.lora_B = nn.Linear(rank, dim, bias=False)
+        # Scaling factor
+        self.scaling = alpha / rank
+
+        # Initialize A with Xavier, B with zeros
+        nn.init.normal_(self.lora_A.weight, std=1 / rank)
+        nn.init.zeros_(self.lora_B.weight)
+
+    def forward(self, x):
+        # x: (B, N, D)
+        # LoRA: delta = B @ A @ x, output = x + scaling * delta
+        return x + self.scaling * self.lora_B(self.lora_A(x))
+
+    def get_trainable_params(self) -> int:
+        """Get number of trainable parameters in this adapter."""
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
+
+
+class TaskLoRAAdapter(nn.Module):
+    """Task-specific LoRA adapter bank.
+
+    Contains LoRA adapters for multiple tasks.
+    Only one task's adapters are active at a time.
+
+    Usage:
+        # Create adapter bank for multiple tasks
+        task_lora = TaskLoRAAdapter(tasks=["flood", "burn", "crop"], rank=16)
+
+        # Activate task
+        task_lora.set_task("flood")
+
+        # Forward uses flood's adapters
+        features = task_lora(features)
+    """
+
+    def __init__(
+        self,
+        tasks: List[str],
+        dim: int = 768,
+        rank: int = 16,
+        alpha: int = 32,
+    ):
+        super().__init__()
+        self.tasks = tasks
+        self.dim = dim
+        self.rank = rank
+        self.alpha = alpha
+        self._current_task = None
+
+        # Create one LoRA adapter per feature level, per task
+        # Structure: {task: [LoRA_f2, LoRA_f5, LoRA_f8, LoRA_f11]}
+        self._task_adapters: Dict[str, nn.ModuleList] = {}
+
+        for task in tasks:
+            self._task_adapters[task] = nn.ModuleList([
+                LoRAAdapter(dim=dim, rank=rank, alpha=alpha)
+                for _ in range(4)  # 4 feature levels [2, 5, 8, 11]
+            ])
+
+    def set_task(self, task: str) -> None:
+        """Activate a task's LoRA adapters.
+
+        Args:
+            task: Task name (must be in self.tasks)
+        """
+        if task not in self._task_adapters:
+            raise ValueError(f"Unknown task: {task}. Available: {self.tasks}")
+        self._current_task = task
+
+    def get_task(self) -> Optional[str]:
+        """Get current active task."""
+        return self._current_task
+
+    def forward(self, features: List[torch.Tensor]) -> List[torch.Tensor]:
+        """Apply task-specific LoRA to features.
+
+        Args:
+            features: List of feature tensors from backbone
+
+        Returns:
+            Features with LoRA adaptation applied
+        """
+        if self._current_task is None:
+            return features
+
+        adapters = self._task_adapters[self._current_task]
+        return [adapter(feat) for adapter, feat in zip(adapters, features)]
+
+    def register_task(self, task: str) -> None:
+        """Register a new task with its LoRA adapters.
+
+        Args:
+            task: Task name
+        """
+        if task not in self._task_adapters:
+            self._task_adapters[task] = nn.ModuleList([
+                LoRAAdapter(dim=self.dim, rank=self.rank, alpha=self.alpha)
+                for _ in range(4)
+            ])
+            self.tasks.append(task)
+
+    def get_adapter_params(self, task: str) -> int:
+        """Get number of trainable params for a task's adapters."""
+        if task not in self._task_adapters:
+            return 0
+        return sum(
+            p.numel()
+            for adapter in self._task_adapters[task]
+            for p in adapter.parameters()
+            if p.requires_grad
+        )
+
+
 class FloodModel(nn.Module):
     """Flood segmentation model.
 
     Architecture:
-        Input (mod_dict) -> TerraMind Backbone -> Decoder -> Flood Mask
+        Input (mod_dict) -> TerraMind -> FeatureExtractor -> [TaskLoRAAdapter] -> Decoder -> Flood Mask
 
     Usage:
-        # Create model
+        # Single task model
         model = FloodModel(config=FloodModelConfig(backbone="terramind_v1_base"))
+        output = model(mod_dict)
 
-        # Forward pass
-        mod_dict = {"S2L1C": {"x": s2_tensor}}
-        output = model(mod_dict)  # (B, num_classes, H, W)
-
-        # Training
-        loss = criterion(output, target)
+        # Multi-task model
+        model = FloodModel(
+            tasks=["flood", "burn"],  # Multi-task mode
+            backbone="terramind_v1_base"
+        )
+        model.set_task("flood")  # Activate flood adapters
+        output = model(mod_dict)
     """
 
     def __init__(
         self,
         config: Optional[FloodModelConfig] = None,
+        tasks: Optional[List[str]] = None,  # For multi-task mode
         **kwargs
     ):
         super().__init__()
 
         self.config = config or FloodModelConfig(**kwargs)
         self.num_classes = self.config.num_classes
+        self.is_multitask = tasks is not None
+        self.tasks = tasks or [self.config.task if hasattr(self.config, 'task') else "default"]
 
         # Backbone
         from geofm.models.backbones.terramind_factory import create_terramind_config
@@ -84,29 +218,26 @@ class FloodModel(nn.Module):
         )
         self.backbone = self._create_backbone(terramind_config)
 
-        # Apply LoRA if enabled
-        if self.config.use_lora:
-            from geofm.models.lora import inject_lora
-            try:
-                self.backbone = inject_lora(
-                    self.backbone,
-                    rank=self.config.lora_rank,
-                    alpha=self.config.lora_alpha,
-                    dropout=self.config.lora_dropout,
-                )
-                print(f"LoRA applied with rank={self.config.lora_rank}")
-            except ValueError as e:
-                # LoRA injection failed (model may not have standard attention modules)
-                # Continue without LoRA for placeholder backbones
-                print(f"Warning: LoRA injection failed ({e}). Continuing without LoRA.")
-                self.config.use_lora = False
-
         # Feature extractor
         from geofm.models.backbones.feature_extractor import FeatureExtractor
         self.feature_extractor = FeatureExtractor(
             self.backbone,
             feature_indices=self.config.feature_indices
         )
+
+        # Task-specific LoRA adapters between feature extractor and decoder
+        if self.config.use_lora or self.is_multitask:
+            self.task_lora = TaskLoRAAdapter(
+                tasks=self.tasks,
+                dim=768,
+                rank=self.config.lora_rank,
+                alpha=self.config.lora_alpha,
+            )
+            # Set default task
+            self.task_lora.set_task(self.tasks[0])
+            print(f"TaskLoRA adapters: {len(self.tasks)} tasks, rank={self.config.lora_rank}")
+        else:
+            self.task_lora = None
 
         # Decoder
         self.decoder = self._create_decoder()
@@ -175,6 +306,10 @@ class FloodModel(nn.Module):
         # Extract features
         features = self.feature_extractor(mod_dict)
 
+        # Apply task-specific LoRA adapters
+        if self.task_lora is not None:
+            features = self.task_lora(features)
+
         # Use last feature for simplicity
         # In full implementation, would use all features with skip connections
         x = features[-1]  # (B, N, D) where N=tokens, D=dim
@@ -207,6 +342,28 @@ class FloodModel(nn.Module):
         )
 
         return output
+
+    def set_task(self, task: str) -> None:
+        """Switch to a different task's LoRA adapters.
+
+        Args:
+            task: Task name
+        """
+        if self.task_lora is not None:
+            self.task_lora.set_task(task)
+            print(f"Switched to task: {task}")
+
+    def get_current_task(self) -> Optional[str]:
+        """Get the current active task."""
+        if self.task_lora is not None:
+            return self.task_lora.get_task()
+        return None
+
+    def get_task_params(self, task: str) -> int:
+        """Get trainable params for a specific task's LoRA adapters."""
+        if self.task_lora is not None:
+            return self.task_lora.get_adapter_params(task)
+        return 0
 
     def get_trainable_params(self) -> int:
         """Get number of trainable parameters."""
