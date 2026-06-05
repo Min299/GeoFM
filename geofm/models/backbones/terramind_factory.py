@@ -73,6 +73,7 @@ TERRAMIND_VARIANTS = {
 def create_terramind_config(
     model_name: str = "terramind_v1_base",
     modalities: List[str] = None,
+    pretrained: bool = True,
     **kwargs
 ) -> TerraMindConfig:
     """Create a TerraMindConfig with smart defaults.
@@ -80,6 +81,7 @@ def create_terramind_config(
     Args:
         model_name: Model variant (tiny, small, base, base_tim, large)
         modalities: List of modalities (S2L1C, S2L2A, S1GRD, RGB, DEM)
+        pretrained: Whether to use pretrained weights
         **kwargs: Additional config overrides
 
     Returns:
@@ -90,7 +92,7 @@ def create_terramind_config(
 
     return TerraMindConfig(
         model_name=model_name,
-        pretrained=True,
+        pretrained=pretrained,
         modalities=modalities or ["S2L1C"],
         feature_indices=default_indices,
         **kwargs
