@@ -2,14 +2,15 @@
 
 Reference dataset implementation for Sen1Floods11. Every future dataset should
 follow this same contract: ``dataset[idx]`` returns
-``{"image", "metadata", "task", "label"}``.
+``{"modalities", "metadata", "task", "label"}``.
 
 Expected folder structure::
 
     data/sen1floods11/
-        images/   *.tif
-        labels/   *.tif   (same filenames as images)
-        metadata.csv       (columns: filename, latitude, longitude, day_of_year)
+        S2L1C/   *.tif  (Sentinel-2 images)
+        S1GRD/   *.tif  (SAR images, optional)
+        Label/   *.tif  (same filenames as S2L1C)
+        metadata.csv    (columns: filename, latitude, longitude, day_of_year)
 """
 from pathlib import Path
 
@@ -22,16 +23,26 @@ from geofm.metadata.metadata_encoder import MetadataEncoder
 
 
 class Sen1Floods11Dataset(BaseGeoDataset):
-    def __init__(self, root_dir, metadata_csv=None, transform=None):
-        super().__init__(root_dir=root_dir, task="flood")
+    def __init__(self, root_dir, metadata_csv=None, transform=None,
+                 modalities=None):
+        super().__init__(
+            root_dir=root_dir,
+            task="flood",
+            modalities=modalities or ["S2L1C"]
+        )
 
-        self.root_dir = Path(root_dir)
         self.transform = transform
+        # Modality directories
+        self.modality_dirs = {
+            mod: self.root_dir / mod for mod in self.modalities
+        }
+        self.label_dir = self.root_dir / "Label"
 
-        self.image_dir = self.root_dir / "images"
-        self.label_dir = self.root_dir / "labels"
-
-        self.samples = sorted(list(self.image_dir.glob("*.tif")))
+        # Get sample list from first modality
+        first_mod = self.modalities[0]
+        self.samples = sorted(
+            list(self.modality_dirs[first_mod].glob("*.tif"))
+        )
 
         if metadata_csv:
             self.metadata_df = pd.read_csv(metadata_csv)
@@ -41,14 +52,29 @@ class Sen1Floods11Dataset(BaseGeoDataset):
     def __len__(self):
         return len(self.samples)
 
-    def load_image(self, idx):
+    def load_modalities(self, idx):
+        """Load all modality tensors for a sample.
+
+        Returns:
+            dict: {"S2L1C": tensor, "S1GRD": tensor, ...}
+        """
         image_path = self.samples[idx]
+        modalities = {}
 
-        with rasterio.open(image_path) as src:
-            image = src.read()
+        for mod in self.modalities:
+            mod_path = self.modality_dirs[mod] / image_path.name
+            if mod_path.exists():
+                with rasterio.open(mod_path) as src:
+                    modalities[mod] = torch.tensor(
+                        src.read(), dtype=torch.float32
+                    )
+            else:
+                # Return zeros if modality not available
+                modalities[mod] = torch.zeros(
+                    13 if "S2" in mod else 2, 256, 256
+                )
 
-        image = torch.tensor(image, dtype=torch.float32)
-        return image
+        return modalities
 
     def load_label(self, idx):
         image_path = self.samples[idx]

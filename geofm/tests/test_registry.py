@@ -19,15 +19,15 @@ class DummyDataset(BaseGeoDataset):
     """Dummy dataset for testing."""
 
     def __init__(self, root_dir, task="dummy"):
-        super().__init__(root_dir, task)
+        super().__init__(root_dir, task, modalities=["S2L1C"])
         self.samples = [f"sample_{i}" for i in range(5)]
 
     def __len__(self):
         return len(self.samples)
 
-    def load_image(self, idx):
+    def load_modalities(self, idx):
         import torch
-        return torch.zeros(3, 64, 64)
+        return {"S2L1C": torch.zeros(13, 64, 64)}
 
     def load_label(self, idx):
         import torch
@@ -49,10 +49,13 @@ class TestRegistry:
     def test_register_decorator(self):
         @register_dataset("dummy")
         class NewDataset(BaseGeoDataset):
+            def __init__(self, root_dir, task="dummy"):
+                super().__init__(root_dir, task, modalities=["S2L1C"])
+
             def __len__(self):
                 return 0
 
-            def load_image(self, idx):
+            def load_modalities(self, idx):
                 pass
 
             def load_label(self, idx):
