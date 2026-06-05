@@ -1,7 +1,10 @@
 """geofm.models.backbones.terramind_factory
 
-Factory for creating TerraMind backbones via TerraTorch's EncoderDecoderFactory.
-Based on real TerraTorch config patterns from IBM's flood/burn/crop experiments.
+Single place where TerraMind is instantiated via TerraTorch.
+No trainer should ever directly instantiate TerraMind.
+
+Usage:
+    model = TerraMindFactory.build(cfg)
 """
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
@@ -82,7 +85,6 @@ def create_terramind_config(
     Returns:
         TerraMindConfig instance
     """
-    # Auto-set feature indices based on model variant
     variant_info = TERRAMIND_VARIANTS.get(model_name, {})
     default_indices = variant_info.get("indices", [2, 5, 8, 11])
 
@@ -96,17 +98,57 @@ def create_terramind_config(
 
 
 def get_terramind_info(model_name: str) -> Dict[str, Any]:
-    """Get information about a TerraMind variant.
-
-    Args:
-        model_name: Model variant name
-
-    Returns:
-        Dict with params, indices, description
-    """
+    """Get information about a TerraMind variant."""
     return TERRAMIND_VARIANTS.get(model_name, {})
 
 
 def list_available_variants() -> List[str]:
     """List all available TerraMind variants."""
     return list(TERRAMIND_VARIANTS.keys())
+
+
+class TerraMindFactory:
+    """Factory for building TerraMind models via TerraTorch.
+
+    Centralizes model instantiation to ensure consistent setup
+    across all experiments.
+    """
+
+    @staticmethod
+    def build(cfg: Dict[str, Any]):
+        """Build a TerraMind model from configuration.
+
+        Args:
+            cfg: Configuration dict with keys:
+                - model_factory: e.g., "EncoderDecoderFactory"
+                - model_args: Model arguments (backbone, decoder, etc.)
+                - loss: Loss function name (e.g., "dice", "ce")
+                - ignore_index: Index to ignore in loss
+
+        Returns:
+            TerraTorch model ready for training
+        """
+        from terratorch.tasks import SemanticSegmentationTask
+
+        model = SemanticSegmentationTask(
+            model_factory=cfg["model_factory"],
+            model_args=cfg["model_args"],
+            loss=cfg["loss"],
+            ignore_index=cfg.get("ignore_index", -1)
+        )
+
+        return model
+
+    @staticmethod
+    def build_classification(cfg: Dict[str, Any]):
+        """Build a classification model from configuration."""
+        from terratorch.tasks import ImageClassificationTask
+
+        model = ImageClassificationTask(
+            model_factory=cfg["model_factory"],
+            model_args=cfg["model_args"],
+            loss=cfg.get("loss", "ce"),
+            ignore_index=cfg.get("ignore_index", -1)
+        )
+
+        return model
