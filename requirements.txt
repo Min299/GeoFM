@@ -1,4 +1,8 @@
 torch
 rasterio
 numpy
+pandas
 pyyaml
+
+# dev / testing
+pytest
