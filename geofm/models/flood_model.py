@@ -219,10 +219,10 @@ class FloodModel(nn.Module):
         self.backbone = self._create_backbone(terramind_config)
 
         # Feature extractor
-        from geofm.models.backbones.feature_extractor import FeatureExtractor
+        from geofm.models.features.feature_extractor import FeatureExtractor
         self.feature_extractor = FeatureExtractor(
             self.backbone,
-            feature_indices=self.config.feature_indices
+            self.config.feature_indices
         )
 
         # Task-specific LoRA adapters between feature extractor and decoder
@@ -266,9 +266,17 @@ class FloodModel(nn.Module):
         """Create UNet-style decoder."""
         channels = self.config.decoder_channels
 
-        # Decoder blocks
+        # Decoder blocks - first one gets input from backbone (768 dim)
         self.decoder_blocks = nn.ModuleList()
-        in_channels = channels[0]  # From backbone
+        
+        # Input projection: backbone features (768) -> decoder_channels[0]
+        self.input_proj = nn.Sequential(
+            nn.Conv2d(768, channels[0], kernel_size=1),
+            nn.BatchNorm2d(channels[0]) if self.config.decoder_use_batchnorm else nn.Identity(),
+            nn.ReLU(inplace=True),
+        )
+        
+        in_channels = channels[0]  # After projection
 
         for out_channels in channels[1:]:
             self.decoder_blocks.append(
@@ -305,6 +313,10 @@ class FloodModel(nn.Module):
         """
         # Extract features
         features = self.feature_extractor(mod_dict)
+        
+        # Handle FeatureLevels or list
+        if hasattr(features, 'to_list'):
+            features = features.to_list()
 
         # Apply task-specific LoRA adapters
         if self.task_lora is not None:
@@ -324,6 +336,9 @@ class FloodModel(nn.Module):
             H = W = 16
 
         x = x.permute(0, 2, 1).view(B, D, H, W)
+
+        # Project from backbone dim (768) to decoder channels[0]
+        x = self.input_proj(x)
 
         # Decode
         for decoder_block in self.decoder_blocks:

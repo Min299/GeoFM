@@ -141,22 +141,22 @@ class TerraMindBackbone(nn.Module):
         Returns:
             List of feature tensors, one per layer
         """
-        if self._encoder is not None:
-            # Use real encoder
+        # Handle different encoder types
+        if hasattr(self._encoder, 'cat_encoder_tensors'):
+            # Real TerraTorch encoder
             encoder_tokens, encoder_emb, encoder_mask, modality_mask = \
                 self._encoder.cat_encoder_tensors(mod_dict)
-
             features = self._encoder.forward_encoder(encoder_tokens, encoder_mask)
-            return [features]  # Simplified - real implementation extracts layers
-
-        # Placeholder: return dummy features
-        batch_size = 1
-        num_tokens = 256
-        dim = 768
-        return [
-            torch.zeros(batch_size, num_tokens, dim) 
-            for _ in range(12)  # 12 transformer layers
-        ]
+            return [features]  # Simplified - real impl extracts layers
+        else:
+            # Placeholder encoder - return dummy features
+            batch_size = 1
+            num_tokens = 256
+            dim = 768
+            return [
+                torch.zeros(batch_size, num_tokens, dim).to(next(self.parameters()).device if list(self.parameters()) else 'cpu')
+                for _ in range(12)  # 12 transformer layers
+            ]
 
     def extract_features(
         self,
@@ -175,25 +175,21 @@ class TerraMindBackbone(nn.Module):
         """
         indices = indices or self.feature_indices
 
-        if self._encoder is not None:
+        if hasattr(self._encoder, 'cat_encoder_tensors'):
             # Real implementation: extract from transformer layers
-            # features[i] = output of layer i
             encoder_tokens, encoder_emb, encoder_mask, modality_mask = \
                 self._encoder.cat_encoder_tensors(mod_dict)
-
             all_features = self._encoder.forward_encoder(encoder_tokens, encoder_mask)
-
-            # SelectIndices equivalent
             return [all_features[i] for i in indices]
-
-        # Placeholder
-        batch_size = 1
-        num_tokens = 256
-        dim = 768
-        return [
-            torch.zeros(batch_size, num_tokens, dim)
-            for _ in indices
-        ]
+        else:
+            # Placeholder - return dummy features
+            batch_size = 1
+            num_tokens = 256
+            dim = 768
+            return [
+                torch.zeros(batch_size, num_tokens, dim)
+                for _ in indices
+            ]
 
     def get_feature_info(self) -> Dict[str, Any]:
         """Get information about available feature indices."""
