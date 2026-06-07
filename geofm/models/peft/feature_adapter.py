@@ -6,9 +6,11 @@ import torch.nn as nn
 
 class FeatureAdapter(nn.Module):
     """
-    Bottleneck feature adapter.
+    Bottleneck feature adapter for spatial features.
 
-    x -> Down -> GELU -> Up -> Residual
+    Operates on (B, C, H, W) tensors.
+    
+    x -> ChannelProj(C→bottleneck) -> GELU -> ChannelProj(bottleneck→C) -> + residual
 
     Output:
         y = x + Adapter(x)
@@ -22,9 +24,11 @@ class FeatureAdapter(nn.Module):
     ):
         super().__init__()
 
-        self.down = nn.Linear(
+        # Project channels: C -> bottleneck_dim
+        self.down = nn.Conv2d(
             dim,
             bottleneck_dim,
+            kernel_size=1,
             bias=False,
         )
 
@@ -34,9 +38,11 @@ class FeatureAdapter(nn.Module):
             dropout
         )
 
-        self.up = nn.Linear(
+        # Project channels: bottleneck_dim -> C
+        self.up = nn.Conv2d(
             bottleneck_dim,
             dim,
+            kernel_size=1,
             bias=False,
         )
 
