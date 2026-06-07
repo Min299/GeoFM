@@ -50,10 +50,15 @@ class FloodModelConfig:
                 self.feature_indices = [2, 5, 8, 11]
 
 
-class LoRAAdapter(nn.Module):
-    """LoRA adapter applied between feature extractor and decoder.
+class BottleneckAdapter(nn.Module):
+    """Bottleneck Feature Adapter.
 
+    Architecture:
+        x ──→ Linear(D→r) ──→ GELU ──→ Linear(r→D) ──→ + ──→ output
+      ─────────────────────────────────────────────────────────────
+    
     Applied per feature level [f2, f5, f8, f11].
+    NOT LoRA - operates on features, not attention projections.
     """
 
     def __init__(self, dim: int = 768, rank: int = 16, alpha: int = 32):
@@ -61,42 +66,46 @@ class LoRAAdapter(nn.Module):
         self.rank = rank
         self.alpha = alpha
 
-        # LoRA A: down projection
-        self.lora_A = nn.Linear(dim, rank, bias=False)
-        # LoRA B: up projection
-        self.lora_B = nn.Linear(rank, dim, bias=False)
+        # Down projection: D → r
+        self.down = nn.Linear(dim, rank, bias=False)
+        self.act = nn.GELU()
+        # Up projection: r → D
+        self.up = nn.Linear(rank, dim, bias=False)
         # Scaling factor
         self.scaling = alpha / rank
 
-        # Initialize A with Xavier, B with zeros
-        nn.init.normal_(self.lora_A.weight, std=1 / rank)
-        nn.init.zeros_(self.lora_B.weight)
+        # Initialize: down with Xavier, up with zeros
+        nn.init.normal_(self.down.weight, std=1 / rank)
+        nn.init.zeros_(self.up.weight)
 
     def forward(self, x):
         # x: (B, N, D)
-        # LoRA: delta = B @ A @ x, output = x + scaling * delta
-        return x + self.scaling * self.lora_B(self.lora_A(x))
+        # Adapter: output = x + scaling * up(act(down(x)))
+        return x + self.scaling * self.up(self.act(self.down(x)))
 
     def get_trainable_params(self) -> int:
         """Get number of trainable parameters in this adapter."""
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
 
-class TaskLoRAAdapter(nn.Module):
-    """Task-specific LoRA adapter bank.
+class TaskFeatureAdapter(nn.Module):
+    """Task-specific Feature Adapter bank.
 
-    Contains LoRA adapters for multiple tasks.
+    Contains Bottleneck Adapters for multiple tasks.
     Only one task's adapters are active at a time.
+
+    This is NOT LoRA - adapters operate on extracted features,
+    not inside attention layers.
 
     Usage:
         # Create adapter bank for multiple tasks
-        task_lora = TaskLoRAAdapter(tasks=["flood", "burn", "crop"], rank=16)
+        task_adapter = TaskFeatureAdapter(tasks=["flood", "burn", "crop"], rank=16)
 
         # Activate task
-        task_lora.set_task("flood")
+        task_adapter.set_task("flood")
 
         # Forward uses flood's adapters
-        features = task_lora(features)
+        features = task_adapter(features)
     """
 
     def __init__(
@@ -113,18 +122,18 @@ class TaskLoRAAdapter(nn.Module):
         self.alpha = alpha
         self._current_task = None
 
-        # Create one LoRA adapter per feature level, per task
-        # Structure: {task: [LoRA_f2, LoRA_f5, LoRA_f8, LoRA_f11]}
+        # Create one BottleneckAdapter per feature level, per task
+        # Structure: {task: [Adapter_f2, Adapter_f5, Adapter_f8, Adapter_f11]}
         self._task_adapters: Dict[str, nn.ModuleList] = {}
 
         for task in tasks:
             self._task_adapters[task] = nn.ModuleList([
-                LoRAAdapter(dim=dim, rank=rank, alpha=alpha)
+                BottleneckAdapter(dim=dim, rank=rank, alpha=alpha)
                 for _ in range(4)  # 4 feature levels [2, 5, 8, 11]
             ])
 
     def set_task(self, task: str) -> None:
-        """Activate a task's LoRA adapters.
+        """Activate a task's Feature Adapters.
 
         Args:
             task: Task name (must be in self.tasks)
@@ -138,13 +147,13 @@ class TaskLoRAAdapter(nn.Module):
         return self._current_task
 
     def forward(self, features: List[torch.Tensor]) -> List[torch.Tensor]:
-        """Apply task-specific LoRA to features.
+        """Apply task-specific Feature Adapters to features.
 
         Args:
             features: List of feature tensors from backbone
 
         Returns:
-            Features with LoRA adaptation applied
+            Features with Feature Adapter adaptation applied
         """
         if self._current_task is None:
             return features
@@ -153,14 +162,14 @@ class TaskLoRAAdapter(nn.Module):
         return [adapter(feat) for adapter, feat in zip(adapters, features)]
 
     def register_task(self, task: str) -> None:
-        """Register a new task with its LoRA adapters.
+        """Register a new task with its Feature Adapters.
 
         Args:
             task: Task name
         """
         if task not in self._task_adapters:
             self._task_adapters[task] = nn.ModuleList([
-                LoRAAdapter(dim=self.dim, rank=self.rank, alpha=self.alpha)
+                BottleneckAdapter(dim=self.dim, rank=self.rank, alpha=self.alpha)
                 for _ in range(4)
             ])
             self.tasks.append(task)
@@ -181,18 +190,18 @@ class FloodModel(nn.Module):
     """Flood segmentation model.
 
     Architecture:
-        Input (mod_dict) -> TerraMind -> FeatureExtractor -> [TaskLoRAAdapter] -> Decoder -> Flood Mask
+        Input (mod_dict) -> TerraMind -> FeatureExtractor -> [TaskFeatureAdapter] -> PyramidDecoder -> Flood Mask
+
+    This uses Feature Adapters, NOT LoRA.
+    Feature Adapters operate on extracted features, not inside attention layers.
 
     Usage:
-        # Single task model
-        model = FloodModel(config=FloodModelConfig(backbone="terramind_v1_base"))
+        # Create model with Feature Adapter
+        model = FloodModel(use_feature_adapter=True)
         output = model(mod_dict)
 
         # Multi-task model
-        model = FloodModel(
-            tasks=["flood", "burn"],  # Multi-task mode
-            backbone="terramind_v1_base"
-        )
+        model = FloodModel(tasks=["flood", "burn"], use_feature_adapter=True)
         model.set_task("flood")  # Activate flood adapters
         output = model(mod_dict)
     """
@@ -227,7 +236,7 @@ class FloodModel(nn.Module):
 
         # Task-specific LoRA adapters between feature extractor and decoder
         if self.config.use_lora or self.is_multitask:
-            self.task_lora = TaskLoRAAdapter(
+            self.task_lora = TaskFeatureAdapter(
                 tasks=self.tasks,
                 dim=768,
                 rank=self.config.lora_rank,
