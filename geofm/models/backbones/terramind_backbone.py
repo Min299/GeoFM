@@ -45,6 +45,8 @@ class TerraMindBackbone(nn.Module):
         f2, f5, f8, f11 = backbone.extract_features(mod_dict, indices=[2, 5, 8, 11])
     """
 
+    DEFAULT_FEATURE_INDICES = [2, 5, 8, 11]
+
     def __init__(
         self,
         model_name: str = "terramind_v1_base",
@@ -57,39 +59,58 @@ class TerraMindBackbone(nn.Module):
         super().__init__()
 
         self.model_name = model_name
+        self.pretrained = pretrained
         self.modalities = modalities or ["S2L1C"]
-        self.feature_indices = feature_indices or [2, 5, 8, 11]
+        self.feature_indices = feature_indices or self.DEFAULT_FEATURE_INDICES
         self.merge_method = merge_method
         self.tim_modalities = tim_modalities
 
-        # TerraTorch model
-        self._model = None
-        self._encoder = None
+        # Load the actual TerraMind model
         self._load_terramind()
 
     def _load_terramind(self):
-        """Load TerraMind from terratorch."""
-        try:
-            from terratorch.models.backbones.terramind.model.terramind import TerraMind
-            from terratorch.models.necks import SelectIndices
+        """Load TerraMind from terratorch registry."""
+        from terratorch.registry import TERRATORCH_BACKBONE_REGISTRY
 
-            # Build model using TerraTorch's factory
-            # Note: This is a simplified version - full implementation
-            # would use EncoderDecoderFactory with proper config
+        # Map model_name to registry name
+        registry_name = self.model_name
+        if not registry_name.startswith("terramind_"):
+            registry_name = f"terramind_v1_{model_name}"
 
-            # For now, we'll create a wrapper that mirrors TerraTorch's interface
-            self._is_loaded = False
-            self._model = None
-            self._encoder = None
+        # TerraMind expects band configuration to match pretrained weights
+        # S2L1C has 13 bands: COASTAL_AEROSOL, BLUE, GREEN, RED, RED_EDGE_1, RED_EDGE_2,
+        # RED_EDGE_3, NIR_BROAD, NIR_NARROW, WATER_VAPOR, CIRRUS, SWIR_1, SWIR_2
+        S2L1C_BANDS = [
+            "COASTAL_AEROSOL", "BLUE", "GREEN", "RED", "RED_EDGE_1", "RED_EDGE_2",
+            "RED_EDGE_3", "NIR_BROAD", "NIR_NARROW", "WATER_VAPOR", "CIRRUS", "SWIR_1", "SWIR_2"
+        ]
 
-        except ImportError:
-            self._is_loaded = False
-            self._create_placeholder()
+        # S2L2A has 12 bands (no CIRRUS)
+        S2L2A_BANDS = [
+            "COASTAL_AEROSOL", "BLUE", "GREEN", "RED", "RED_EDGE_1", "RED_EDGE_2",
+            "RED_EDGE_3", "NIR_BROAD", "NIR_NARROW", "WATER_VAPOR", "SWIR_1", "SWIR_2"
+        ]
 
-    def _create_placeholder(self):
-        """Create a placeholder model for development without terratorch."""
-        self._encoder = nn.Identity()
-        self._is_loaded = False
+        # Select bands based on modality
+        if "S2L1C" in self.modalities:
+            bands = {"image": S2L1C_BANDS}
+        elif "S2L2A" in self.modalities:
+            bands = {"image": S2L2A_BANDS}
+        else:
+            bands = None
+
+        # Build model from registry
+        # Note: pretrained_bands is already included in the registry functions
+        self._model = TERRATORCH_BACKBONE_REGISTRY.build(
+            registry_name,
+            pretrained=self.pretrained,
+            bands=bands,
+        )
+
+        # Store feature dim (depends on model variant)
+        # TerraMindViT has out_channels list - use first layer's channel count
+        self._feature_dim = self._model.out_channels[0] if hasattr(self._model, 'out_channels') else 768
+        self._num_layers = len(self._model.out_channels) if hasattr(self._model, 'out_channels') else 12
 
     @classmethod
     def from_config(cls, config) -> "TerraMindBackbone":
@@ -105,91 +126,71 @@ class TerraMindBackbone(nn.Module):
 
     def freeze(self):
         """Freeze all backbone parameters."""
-        if self._encoder is not None:
-            for p in self._encoder.parameters():
+        if self._model is not None:
+            for p in self._model.parameters():
                 p.requires_grad = False
 
     def unfreeze(self):
         """Unfreeze all backbone parameters."""
-        if self._encoder is not None:
-            for p in self._encoder.parameters():
+        if self._model is not None:
+            for p in self._model.parameters():
                 p.requires_grad = True
 
     def is_frozen(self) -> bool:
         """Check if backbone is frozen."""
-        if self._encoder is None:
+        if self._model is None:
             return False
-        for p in self._encoder.parameters():
+        for p in self._model.parameters():
             if p.requires_grad:
                 return False
         return True
 
-    def forward(
-        self,
-        mod_dict: Dict[str, Dict[str, torch.Tensor]]
-    ) -> List[torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
         """Forward pass through the backbone.
 
-        TerraTorch interface:
-        - Input: mod_dict[str, dict[str, Tensor]] = {
-              "S2L1C": {"x": tensor, "input_mask": mask},
-              "S1GRD": {"x": tensor, "input_mask": mask}
-          }
-        - Output: List[Tensor] - features from each transformer layer
-                  Shape: (B, N, D) per tensor
+        Args:
+            x: Input tensor (B, C, H, W) - typically (B, 13, 224, 224) for S2L1C
+               OR dict format: {"image": tensor} for TerraTorch compatibility
 
         Returns:
-            List of feature tensors, one per layer
+            List of feature tensors from each transformer layer.
+            Shape per tensor: (B, N, D) where N=sequence_length, D=embed_dim
         """
-        # Handle different encoder types
-        if hasattr(self._encoder, 'cat_encoder_tensors'):
-            # Real TerraTorch encoder
-            encoder_tokens, encoder_emb, encoder_mask, modality_mask = \
-                self._encoder.cat_encoder_tensors(mod_dict)
-            features = self._encoder.forward_encoder(encoder_tokens, encoder_mask)
-            return [features]  # Simplified - real impl extracts layers
+        if self._model is None:
+            raise RuntimeError("Model not loaded. Call _load_terramind() first.")
+
+        # Handle both dict and tensor inputs
+        if isinstance(x, dict):
+            # Already in TerraTorch dict format
+            mod_dict = x
         else:
-            # Placeholder encoder - return dummy features
-            batch_size = 1
-            num_tokens = 256
-            dim = 768
-            return [
-                torch.zeros(batch_size, num_tokens, dim).to(next(self.parameters()).device if list(self.parameters()) else 'cpu')
-                for _ in range(12)  # 12 transformer layers
-            ]
+            # Convert tensor to dict format
+            mod_dict = {"image": x}
+
+        # TerraMind expects dict format: {modality: tensor}
+        features = self._model(mod_dict)
+
+        return features
 
     def extract_features(
         self,
-        mod_dict: Dict[str, Dict[str, torch.Tensor]],
+        x: torch.Tensor,
         indices: Optional[List[int]] = None
     ) -> List[torch.Tensor]:
         """Extract features at specific indices for distillation.
 
         Args:
-            mod_dict: Modality dict (TerraTorch format)
+            x: Input tensor (B, C, H, W)
             indices: Feature indices to extract [2, 5, 8, 11] default
 
         Returns:
             List of feature tensors at specified indices
-            Shape: (B, N, D) per tensor
+            Shape per tensor: (B, N, D) where N=sequence_length, D=embed_dim
         """
         indices = indices or self.feature_indices
+        all_features = self.forward(x)
 
-        if hasattr(self._encoder, 'cat_encoder_tensors'):
-            # Real implementation: extract from transformer layers
-            encoder_tokens, encoder_emb, encoder_mask, modality_mask = \
-                self._encoder.cat_encoder_tensors(mod_dict)
-            all_features = self._encoder.forward_encoder(encoder_tokens, encoder_mask)
-            return [all_features[i] for i in indices]
-        else:
-            # Placeholder - return dummy features
-            batch_size = 1
-            num_tokens = 256
-            dim = 768
-            return [
-                torch.zeros(batch_size, num_tokens, dim)
-                for _ in indices
-            ]
+        return [all_features[i] for i in indices]
 
     def get_feature_info(self) -> Dict[str, Any]:
         """Get information about available feature indices."""
@@ -198,9 +199,10 @@ class TerraMindBackbone(nn.Module):
             "modalities": self.modalities,
             "feature_indices": self.feature_indices,
             "merge_method": self.merge_method,
-            "is_loaded": self._is_loaded,
+            "feature_dim": self._feature_dim,
+            "num_layers": self._num_layers,
             "output_type": "List[Tensor]",
-            "output_shape": "(B, N, D) - Batch, Tokens, Dim",
+            "output_shape": "(B, N, D) - Batch, Sequence, Embed",
         }
 
     def __repr__(self):
@@ -210,6 +212,7 @@ class TerraMindBackbone(nn.Module):
             f"  modalities={self.modalities},\n"
             f"  feature_indices={self.feature_indices},\n"
             f"  merge_method={self.merge_method},\n"
-            f"  is_loaded={self._is_loaded}\n"
+            f"  feature_dim={self._feature_dim},\n"
+            f"  num_layers={self._num_layers}\n"
             f")"
         )
