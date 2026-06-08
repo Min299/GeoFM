@@ -13,6 +13,28 @@ from geofm.evaluation.metric_registry import (
     is_regression_task,
 )
 
+# Phase 5C - Benchmark Evaluation Infrastructure
+from geofm.evaluation.benchmark_metrics import (
+    BenchmarkMetrics,
+    TaskMetrics,
+    ExperimentMetrics,
+)
+from geofm.evaluation.benchmark_report import (
+    BenchmarkReport,
+    MultiTaskReport,
+    ExperimentComparison,
+)
+from geofm.evaluation.results_writer import (
+    ResultsWriter,
+    CSVResultsWriter,
+    TensorBoardWriter,
+)
+from geofm.evaluation.leaderboard import (
+    Leaderboard,
+    LeaderboardEntry,
+    MultiMetricLeaderboard,
+)
+
 __all__ = [
     # Metrics
     "SegmentationMetrics",
@@ -24,4 +46,17 @@ __all__ = [
     "is_segmentation_task",
     "is_classification_task",
     "is_regression_task",
+    # Phase 5C - Benchmark Evaluation
+    "BenchmarkMetrics",
+    "TaskMetrics",
+    "ExperimentMetrics",
+    "BenchmarkReport",
+    "MultiTaskReport",
+    "ExperimentComparison",
+    "ResultsWriter",
+    "CSVResultsWriter",
+    "TensorBoardWriter",
+    "Leaderboard",
+    "LeaderboardEntry",
+    "MultiMetricLeaderboard",
 ]

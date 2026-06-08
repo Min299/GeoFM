@@ -30,6 +30,9 @@ except ImportError:
     LoRAConv2d = None
     count_lora_parameters = None
 
+# TerraMindLoRA alias for backward compatibility
+TerraMindLoRA = LoRALinearAdapter
+
 # Hybrid adapters
 try:
     from geofm.models.peft.hybrid_adapter import (
@@ -69,6 +72,8 @@ __all__ = [
     "LoRALinearAdapter",
     "LoRAConv2d",
     "count_lora_parameters",
+    # TerraMindLoRA alias
+    "TerraMindLoRA",
     # Hybrid
     "HybridAdapter",
     "LoRAFeatureHybrid",

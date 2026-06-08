@@ -8,7 +8,7 @@ import torch.nn as nn
 
 from geofm.models.backbones import build_backbone
 from geofm.models.peft import (
-    TerraMindLoRA,
+    LoRALinearAdapter as TerraMindLoRA,
     TaskFeatureAdapter,
     HybridAdapter,
 )
