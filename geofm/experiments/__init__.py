@@ -7,17 +7,29 @@ from geofm.experiments.experiment import (
     ExperimentResult,
     create_experiment,
 )
+from geofm.experiments.experiment_builder import (
+    ExperimentBuilder,
+    FeatureAdapterModel,
+    build_experiment_model,
+)
+from geofm.experiments.experiment_runner import ExperimentRunner
 from geofm.experiments.registry import (
     ExperimentRegistry,
     get_registry,
 )
-from geofm.experiments.runner import ExperimentRunner
 
 __all__ = [
+    # Config
     "ExperimentConfig",
     "ExperimentResult",
     "create_experiment",
+    # Builder
+    "ExperimentBuilder",
+    "FeatureAdapterModel",
+    "build_experiment_model",
+    # Runner
+    "ExperimentRunner",
+    # Registry
     "ExperimentRegistry",
     "get_registry",
-    "ExperimentRunner",
 ]

@@ -16,7 +16,7 @@ class ExperimentConfig:
     Attributes:
         name: Experiment name (e.g., "flood_full_ft_v1")
         task: Task type (e.g., "flood", "burn", "crop")
-        training_mode: "full_ft" or "lora"
+        adaptation: Adaptation method ("feature", "lora", "hybrid", "full_ft")
         backbone: Backbone model name
         dataset: Dataset name
         epochs: Number of training epochs
@@ -27,8 +27,8 @@ class ExperimentConfig:
 
     name: str
     task: str = "flood"
-    training_mode: str = "full_ft"  # "full_ft" or "lora"
-    backbone: str = "terramind_v1_base"
+    adaptation: str = "feature"  # "feature", "lora", "hybrid", "full_ft"
+    backbone: str = "terramind_base"
     dataset: str = "flood_dataset"
 
     # Training
@@ -50,12 +50,28 @@ class ExperimentConfig:
     experiment_id: str = field(default_factory=lambda: datetime.now().strftime("%Y%m%d_%H%M%S"))
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
+    def __post_init__(self):
+        """Validate configuration."""
+        valid_adaptations = ["feature", "lora", "hybrid", "full_ft"]
+        if self.adaptation not in valid_adaptations:
+            raise ValueError(
+                f"Invalid adaptation: {self.adaptation}. "
+                f"Must be one of {valid_adaptations}"
+            )
+
+        valid_tasks = ["flood", "burn", "lulc", "segmentation"]
+        if self.task not in valid_tasks:
+            raise ValueError(
+                f"Invalid task: {self.task}. "
+                f"Must be one of {valid_tasks}"
+            )
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return {
             "name": self.name,
             "task": self.task,
-            "training_mode": self.training_mode,
+            "adaptation": self.adaptation,
             "backbone": self.backbone,
             "dataset": self.dataset,
             "epochs": self.epochs,
@@ -80,6 +96,14 @@ class ExperimentConfig:
         """Load config from JSON file."""
         with open(path, "r") as f:
             data = json.load(f)
+        return cls(**data)
+
+    @classmethod
+    def from_yaml(cls, path: str) -> "ExperimentConfig":
+        """Load config from YAML file."""
+        import yaml
+        with open(path, "r") as f:
+            data = yaml.safe_load(f)
         return cls(**data)
 
 

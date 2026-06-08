@@ -1,0 +1,26 @@
+# Experiment 01: Feature Adapter
+# Baseline experiment with feature-level adaptation
+
+name: exp01_feature_adapter
+task: flood
+adaptation: feature
+backbone: terramind_base
+decoder: default
+
+batch_size: 8
+lr: 1e-4
+weight_decay: 1e-4
+max_epochs: 50
+seed: 42
+
+# Feature adapter config
+feature_adapter:
+  rank: 64
+  dropout: 0.1
+
+# Data config
+data:
+  dataset: sentinel2
+  image_size: 224
+  num_workers: 4
+  augmentation: true
