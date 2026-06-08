@@ -20,6 +20,8 @@ from geofm.models.peft.lora_layer import (
 from geofm.models.peft.lora_adapter import (
     TerraMindLoRA,
     inject_lora,
+    inject_lora_explicit,
+    freeze_all_except_lora,
 )
 from geofm.models.peft.hybrid_adapter import (
     HybridAdapter,
@@ -29,11 +31,15 @@ from geofm.models.peft.parameter_counter import (
     count_total_params,
     count_trainable_params,
     count_frozen_params,
+    count_lora_params,
+    count_lora_layers,
     trainable_ratio,
     peft_percentage,
     format_params,
     print_param_summary,
     verify_peft_ready,
+    verify_lora_only_trainable,
+    summary,
     ParameterCounter,
 )
 
@@ -49,6 +55,8 @@ __all__ = [
     # LoRA adapter
     "TerraMindLoRA",
     "inject_lora",
+    "inject_lora_explicit",
+    "freeze_all_except_lora",
     # Hybrid
     "HybridAdapter",
     "LoRAFeatureHybrid",
@@ -56,10 +64,14 @@ __all__ = [
     "count_total_params",
     "count_trainable_params",
     "count_frozen_params",
+    "count_lora_params",
+    "count_lora_layers",
     "trainable_ratio",
     "peft_percentage",
     "format_params",
     "print_param_summary",
     "verify_peft_ready",
+    "verify_lora_only_trainable",
+    "summary",
     "ParameterCounter",
 ]

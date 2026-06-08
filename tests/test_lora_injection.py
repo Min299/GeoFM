@@ -108,17 +108,26 @@ class TestLoRAInjection:
         assert trainable == lora_params, f"Expected {lora_params} trainable, got {trainable}"
 
     def test_lora_inject_twice_no_double(self):
-        """Injecting LoRA twice should not create duplicates."""
+        """Injecting LoRA twice should not create duplicates.
+
+        Note: Re-injection replaces existing LoRA layers, so the
+        count stays the same but old LoRA params are replaced.
+        """
         model = build_backbone("terramind_base")
         model.freeze()
 
         lora_model = TerraMindLoRA(model, rank=16, alpha=16)
 
+        initial_count = lora_model.count_lora_layers()
+        initial_params = lora_model.count_lora_params()
+
         # Inject again
         lora_model.inject()
 
-        # Should still be 24, not 48
-        assert lora_model.count_lora_layers() == 24
+        # Count should still be 24 (old layers replaced)
+        assert lora_model.count_lora_layers() == initial_count
+        # But params may differ if using same rank
+        assert lora_model.count_lora_params() == initial_params
 
 
 @pytest.mark.integration

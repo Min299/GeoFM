@@ -216,7 +216,7 @@ class TestParameterCounter:
         counter = ParameterCounter(simple_model)
 
         assert counter.model is simple_model
-        assert counter.initial_total > 0
+        assert counter.initial["total"] > 0
 
     def test_get_stats(self, simple_model):
         """Should return statistics dict."""
@@ -227,8 +227,10 @@ class TestParameterCounter:
         assert "total" in stats
         assert "trainable" in stats
         assert "frozen" in stats
-        assert "ratio" in stats
+        assert "trainable_ratio" in stats
         assert "peft_pct" in stats
+        assert "lora" in stats
+        assert "lora_layers" in stats
 
     def test_print_stats(self, simple_model, capsys):
         """Should print formatted stats."""
