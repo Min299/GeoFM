@@ -1,0 +1,48 @@
+# Flood Hybrid (LoRA + Feature) Experiment Configuration
+experiment_name: flood_hybrid
+task: flood
+
+# Adapter Configuration
+adapter_type: hybrid
+
+# Backbone Configuration
+backbone:
+  name: terramind_base
+  frozen: true
+
+# LoRA Configuration
+lora:
+  rank: 16
+  alpha: 32
+  dropout: 0.1
+  target_modules:
+    - q_proj
+    - v_proj
+
+# Feature Adapter Configuration
+feature_adapter:
+  bottleneck_dim: 64
+
+# Decoder Configuration
+decoder:
+  name: flood_decoder
+
+# Training Configuration
+training:
+  batch_size: 8
+  epochs: 20
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  optimizer: adamw
+
+# Loss Configuration
+loss:
+  name: dice
+
+# Evaluation Configuration
+evaluation:
+  metrics:
+    - iou
+    - dice
+    - f1
+  save_predictions: false

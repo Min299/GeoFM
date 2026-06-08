@@ -1,0 +1,44 @@
+# Flood LoRA Experiment Configuration
+experiment_name: flood_lora
+task: flood
+
+# Adapter Configuration
+adapter_type: lora
+
+# Backbone Configuration
+backbone:
+  name: terramind_base
+  frozen: true
+
+# LoRA Configuration
+lora:
+  rank: 16
+  alpha: 32
+  dropout: 0.1
+  target_modules:
+    - q_proj
+    - v_proj
+
+# Decoder Configuration
+decoder:
+  name: flood_decoder
+
+# Training Configuration
+training:
+  batch_size: 8
+  epochs: 20
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  optimizer: adamw
+
+# Loss Configuration
+loss:
+  name: dice
+
+# Evaluation Configuration
+evaluation:
+  metrics:
+    - iou
+    - dice
+    - f1
+  save_predictions: false

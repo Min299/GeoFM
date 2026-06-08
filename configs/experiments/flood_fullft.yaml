@@ -1,0 +1,35 @@
+# Flood Full Fine-tuning Experiment Configuration
+experiment_name: flood_fullft
+task: flood
+
+# Adapter Configuration
+adapter_type: full_ft
+
+# Backbone Configuration
+backbone:
+  name: terramind_base
+  frozen: false
+
+# Decoder Configuration
+decoder:
+  name: flood_decoder
+
+# Training Configuration
+training:
+  batch_size: 4  # Reduced due to more trainable params
+  epochs: 20
+  learning_rate: 0.00001  # Lower LR for full fine-tuning
+  weight_decay: 0.01
+  optimizer: adamw
+
+# Loss Configuration
+loss:
+  name: dice
+
+# Evaluation Configuration
+evaluation:
+  metrics:
+    - iou
+    - dice
+    - f1
+  save_predictions: false
