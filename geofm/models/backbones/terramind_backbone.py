@@ -75,7 +75,7 @@ class TerraMindBackbone(nn.Module):
         # Map model_name to registry name
         registry_name = self.model_name
         if not registry_name.startswith("terramind_"):
-            registry_name = f"terramind_v1_{model_name}"
+            registry_name = f"terramind_v1_{self.model_name}"
 
         # TerraMind expects band configuration to match pretrained weights
         # S2L1C has 13 bands: COASTAL_AEROSOL, BLUE, GREEN, RED, RED_EDGE_1, RED_EDGE_2,

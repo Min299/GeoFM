@@ -1,6 +1,10 @@
 """geofm.models.peft.lora_targets
 
 Target module names for LoRA injection.
+
+Note: MLP targeting is disabled by default.
+Geospatial PEFT literature shows attention LoRA captures most gains.
+MLP LoRA doubles parameter count with marginal benefit.
 """
 from __future__ import annotations
 
@@ -14,42 +18,46 @@ class LoRATargets:
     These are the default target module names used in various vision transformers.
     Different models may use different naming conventions.
 
+    Note: MLP targets (fc1, fc2, fc3) are disabled by default.
+    Only attention targets (qkv, proj) are enabled.
+
     Attributes:
         qkv: Query, Key, Value projection module name
         proj: Output projection module name
-        fc1: First MLP layer module name
-        fc2: Second MLP layer module name
-        fc3: Third MLP layer module name (if applicable)
+        fc1: First MLP layer module name (disabled by default)
+        fc2: Second MLP layer module name (disabled by default)
+        fc3: Third MLP layer module name (disabled by default)
     """
 
     qkv: str = "attn.qkv"
     proj: str = "attn.proj"
-    fc1: str = "mlp.fc1"
-    fc2: str = "mlp.fc2"
-    fc3: str = "mlp.fc3"
+    fc1: str = ""  # Disabled
+    fc2: str = ""  # Disabled
+    fc3: str = ""  # Disabled
 
 
 # Preset target configurations for different backbones
+# Note: MLP targets are disabled by default per geospatial PEFT literature
 TERRAMIND_TARGETS = LoRATargets(
     qkv="attn.qkv",
     proj="attn.proj",
-    fc1="mlp.fc1",
-    fc2="mlp.fc2",
+    fc1="",  # Disabled
+    fc2="",  # Disabled
 )
 
 PRITHVI_TARGETS = LoRATargets(
     qkv="attention.qkv",
     proj="attention.proj",
-    fc1="mlp.fc1",
-    fc2="mlp.fc2",
+    fc1="",  # Disabled
+    fc2="",  # Disabled
 )
 
 VIT_TARGETS = LoRATargets(
     qkv="attn.qkv",
     proj="attn.proj",
-    fc1="mlp.fc1",
-    fc2="mlp.fc2",
-    fc3="mlp.fc3",
+    fc1="",  # Disabled
+    fc2="",  # Disabled
+    fc3="",  # Disabled
 )
 
 DEFAULT_LORA_TARGETS = TERRAMIND_TARGETS
@@ -84,16 +92,20 @@ def get_target_names(targets: LoRATargets, include_mlp: bool = False) -> list:
 
     Args:
         targets: LoRATargets instance
-        include_mlp: Whether to include MLP layers
+        include_mlp: Whether to include MLP layers (default: False)
 
     Returns:
-        List of module name patterns
+        List of module name patterns (empty strings filtered out)
     """
     names = [targets.qkv, targets.proj]
 
     if include_mlp:
-        names.extend([targets.fc1, targets.fc2])
+        if targets.fc1:
+            names.append(targets.fc1)
+        if targets.fc2:
+            names.append(targets.fc2)
         if targets.fc3:
             names.append(targets.fc3)
 
-    return names
+    # Filter out empty strings
+    return [n for n in names if n]

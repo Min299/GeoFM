@@ -16,8 +16,9 @@ class TestLoRATargets:
 
         assert targets.qkv == "attn.qkv"
         assert targets.proj == "attn.proj"
-        assert targets.fc1 == "mlp.fc1"
-        assert targets.fc2 == "mlp.fc2"
+        # MLP targeting disabled by default
+        assert targets.fc1 == ""
+        assert targets.fc2 == ""
 
     def test_custom_targets(self):
         """Custom targets should store values."""
@@ -79,15 +80,22 @@ class TestLoRATargets:
         assert "attn.proj" in names
 
     def test_get_target_names_with_mlp(self):
-        """get_target_names with MLP should include fc layers."""
+        """get_target_names with MLP should filter empty strings.
+
+        Even with include_mlp=True, empty fc1/fc2/fc3 should be filtered.
+        """
         from geofm.models.peft.lora_targets import get_target_names, TERRAMIND_TARGETS
 
         names = get_target_names(TERRAMIND_TARGETS, include_mlp=True)
 
-        # TERRAMIND has qkv, proj, fc1, fc2, fc3 (fc3 has default value)
-        assert len(names) == 5
-        assert "mlp.fc1" in names
-        assert "mlp.fc2" in names
+        # TERRAMIND has qkv, proj enabled, fc1/fc2/fc3 disabled (empty strings)
+        # So even with include_mlp=True, only qkv and proj are returned
+        assert len(names) == 2
+        assert "attn.qkv" in names
+        assert "attn.proj" in names
+        # MLP targets are empty strings, filtered out
+        assert "mlp.fc1" not in names
+        assert "mlp.fc2" not in names
 
 
 if __name__ == "__main__":

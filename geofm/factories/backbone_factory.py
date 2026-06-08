@@ -1,37 +1,37 @@
 """geofm.factories.backbone_factory
 
 Factory for creating backbone encoders.
-Supports TerraMind, Prithvi, StudentViT, and other backbones.
+Supports TerraMind (base, small, tiny), Prithvi, StudentViT, and other backbones.
 """
 from __future__ import annotations
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Type
 
 
 class BackboneFactory:
     """Factory for creating backbone encoders.
 
     This factory supports multiple backbone types:
-    - TerraMind: Primary backbone for GeoFM
+    - TerraMind: Primary backbone for GeoFM (base, small, tiny variants)
     - Prithvi: Temporal/spatial backbone for flood
     - StudentViT: Distilled student model
     - Generic: Any model conforming to BackboneAdapter interface
 
     Usage:
         # Create TerraMind backbone
-        backbone = BackboneFactory.build("terramind", pretrained=True)
+        backbone = BackboneFactory.build("terramind_base")
 
-        # Create Prithvi backbone
-        backbone = BackboneFactory.build("prithvi", pretrained=True)
+        # Create TerraMind small variant
+        backbone = BackboneFactory.build("terramind_small")
 
         # Create generic ViT
         backbone = BackboneFactory.build("vit", img_size=224, patch_size=16)
     """
 
-    _registry: Dict[str, type] = {}
+    _registry: Dict[str, Type] = {}
 
     @classmethod
-    def register(cls, name: str, backbone_class: type) -> None:
+    def register(cls, name: str, backbone_class: Type) -> None:
         """Register a new backbone type.
 
         Args:
@@ -49,7 +49,7 @@ class BackboneFactory:
         """Build a backbone by name.
 
         Args:
-            backbone_name: Name of the backbone (terramind, prithvi, vit, etc.)
+            backbone_name: Name of the backbone (terramind_base, terramind_small, prithvi, vit, etc.)
             **kwargs: Arguments to pass to the backbone constructor
 
         Returns:
@@ -64,9 +64,9 @@ class BackboneFactory:
         if name in cls._registry:
             return cls._registry[name](**kwargs)
 
-        # Default implementations
-        if name == "terramind":
-            return cls._build_terramind(**kwargs)
+        # TerraMind variants
+        if name.startswith("terramind"):
+            return cls._build_terramind(name, **kwargs)
 
         if name == "prithvi":
             return cls._build_prithvi(**kwargs)
@@ -77,16 +77,25 @@ class BackboneFactory:
         if name == "resnet":
             return cls._build_resnet(**kwargs)
 
+        if name.startswith("student"):
+            return cls._build_student_vit(name, **kwargs)
+
         raise ValueError(
             f"Unknown backbone: {backbone_name}. "
-            f"Available: {list(cls._registry.keys()) + ['terramind', 'prithvi', 'vit', 'resnet']}"
+            f"Available: {list(cls._registry.keys()) + ['terramind_base', 'terramind_small', 'terramind_tiny', 'prithvi', 'vit', 'resnet', 'student_vit']}"
         )
 
     @classmethod
-    def _build_terramind(cls, **kwargs) -> Any:
+    def _build_terramind(cls, name: str, **kwargs) -> Any:
         """Build TerraMind backbone.
 
+        Supports variants:
+        - terramind_base: Full model
+        - terramind_small: Smaller variant
+        - terramind_tiny: Tiny variant
+
         Args:
+            name: TerraMind variant name
             **kwargs: TerraMind-specific arguments
 
         Returns:
@@ -95,7 +104,19 @@ class BackboneFactory:
         try:
             from geofm.models.backbones.terramind_backbone import TerraMindBackbone
 
-            return TerraMindBackbone(**kwargs)
+            # Map variant name to model name
+            variant_map = {
+                "terramind_base": "terramind_v1_base",
+                "terramind_small": "terramind_v1_small",
+                "terramind_tiny": "terramind_v1_tiny",
+            }
+
+            model_name = variant_map.get(name, name)
+
+            return TerraMindBackbone(
+                model_name=model_name,
+                **kwargs,
+            )
         except ImportError:
             raise ImportError(
                 "TerraMind backbone not available. "
@@ -115,7 +136,7 @@ class BackboneFactory:
         # Prithvi integration would go here
         raise NotImplementedError(
             "Prithvi backbone not yet integrated. "
-            "Use 'terramind' or 'vit' for now."
+            "Use 'terramind_base', 'terramind_small', or 'vit' for now."
         )
 
     @classmethod
@@ -178,6 +199,27 @@ class BackboneFactory:
         return model_fn(pretrained=pretrain)
 
     @classmethod
+    def _build_student_vit(cls, name: str, **kwargs) -> Any:
+        """Build Student ViT for distillation.
+
+        Args:
+            name: Student variant name
+            **kwargs: Student-specific arguments
+
+        Returns:
+            Student ViT backbone
+        """
+        try:
+            from geofm.models.backbones.student_vit import StudentViT
+
+            return StudentViT(**kwargs)
+        except ImportError:
+            raise NotImplementedError(
+                "StudentViT not available. "
+                "Use 'terramind_base' or 'vit' for now."
+            )
+
+    @classmethod
     def list_available(cls) -> list:
         """List available backbone types.
 
@@ -185,9 +227,12 @@ class BackboneFactory:
             List of available backbone names
         """
         available = list(cls._registry.keys()) + [
-            "terramind",
+            "terramind_base",
+            "terramind_small",
+            "terramind_tiny",
             "prithvi",
             "vit",
             "resnet",
+            "student_vit",
         ]
         return sorted(set(available))
