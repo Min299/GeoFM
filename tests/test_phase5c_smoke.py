@@ -44,11 +44,11 @@ class TestPhase5CSmoke:
         """Adaptation benchmark should be importable."""
         from geofm.experiments import (
             AdaptationBenchmark,
-            MultiTaskBenchmark,
+            AdaptationMultiTaskBenchmark,
         )
 
         assert AdaptationBenchmark is not None
-        assert MultiTaskBenchmark is not None
+        assert AdaptationMultiTaskBenchmark is not None
 
     def test_benchmark_runner_imports(self):
         """Benchmark runner should be importable."""

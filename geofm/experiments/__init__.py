@@ -39,11 +39,25 @@ from geofm.experiments.benchmark_config import (
 )
 from geofm.experiments.adaptation_benchmark import (
     AdaptationBenchmark,
-    MultiTaskBenchmark,
+    AdaptationMultiTaskBenchmark,
 )
 from geofm.experiments.benchmark_runner import (
     BenchmarkRunner,
     SuiteRunner,
+)
+
+# Phase 5D - Multi-Task Learning
+from geofm.experiments.multitask_experiment import (
+    MultiTaskExperiment,
+    MultiTaskExperimentSuite,
+    ExperimentConfig,
+    ExperimentResult,
+)
+from geofm.experiments.multitask_benchmark import (
+    MultiTaskBenchmark as MTBenchmark,
+    QuickMultiTaskBenchmark,
+    MultiTaskBenchmarkConfig,
+    BenchmarkResult,
 )
 
 __all__ = [
@@ -74,7 +88,13 @@ __all__ = [
     "BenchmarkConfig",
     "BenchmarkSuiteConfig",
     "AdaptationBenchmark",
-    "MultiTaskBenchmark",
+    "AdaptationMultiTaskBenchmark",
     "BenchmarkRunner",
     "SuiteRunner",
+    # Phase 5D - Multi-Task Learning
+    "MultiTaskExperiment",
+    "MultiTaskExperimentSuite",
+    "MTBenchmark",
+    "QuickMultiTaskBenchmark",
+    "MultiTaskBenchmarkConfig",
 ]

@@ -21,7 +21,7 @@ from geofm.evaluation.benchmark_metrics import (
 )
 from geofm.evaluation.benchmark_report import (
     BenchmarkReport,
-    MultiTaskReport,
+    MultiTaskReport as BenchmarkMultiTaskReport,
     ExperimentComparison,
 )
 from geofm.evaluation.results_writer import (
@@ -33,6 +33,19 @@ from geofm.evaluation.leaderboard import (
     Leaderboard,
     LeaderboardEntry,
     MultiMetricLeaderboard,
+)
+
+# Phase 5D - Multi-Task Learning
+from geofm.evaluation.multitask_metrics import (
+    MultiTaskMetrics as TaskMultiTaskMetrics,
+    TaskMetrics as MultiTaskTaskMetrics,
+    MetricTracker,
+    AggregatedMetrics,
+)
+from geofm.evaluation.multitask_report import (
+    MultiTaskReport,
+    ComparisonReport,
+    TrainingProgressReport,
 )
 
 __all__ = [
@@ -51,7 +64,7 @@ __all__ = [
     "TaskMetrics",
     "ExperimentMetrics",
     "BenchmarkReport",
-    "MultiTaskReport",
+    "BenchmarkMultiTaskReport",
     "ExperimentComparison",
     "ResultsWriter",
     "CSVResultsWriter",
@@ -59,4 +72,11 @@ __all__ = [
     "Leaderboard",
     "LeaderboardEntry",
     "MultiMetricLeaderboard",
+    # Phase 5D - Multi-Task Learning
+    "TaskMultiTaskMetrics",
+    "MetricTracker",
+    "AggregatedMetrics",
+    "MultiTaskReport",
+    "ComparisonReport",
+    "TrainingProgressReport",
 ]

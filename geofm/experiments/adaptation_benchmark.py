@@ -116,7 +116,7 @@ class AdaptationBenchmark:
         return min(losses)
 
 
-class MultiTaskBenchmark:
+class AdaptationMultiTaskBenchmark:
     """Benchmark for multitask learning.
 
     Runs multiple tasks and collects metrics.
