@@ -12,6 +12,13 @@ from geofm.experiments.experiment_builder import (
     FeatureAdapterModel,
     build_experiment_model,
 )
+from geofm.experiments.experiment_tracker import (
+    ExperimentTracker,
+    ExperimentRecord,
+)
+from geofm.experiments.result_manager import (
+    ResultManager,
+)
 from geofm.experiments.experiment_runner import ExperimentRunner
 from geofm.experiments.registry import (
     ExperimentRegistry,
@@ -27,6 +34,11 @@ __all__ = [
     "ExperimentBuilder",
     "FeatureAdapterModel",
     "build_experiment_model",
+    # Tracker
+    "ExperimentTracker",
+    "ExperimentRecord",
+    # Result Manager
+    "ResultManager",
     # Runner
     "ExperimentRunner",
     # Registry
