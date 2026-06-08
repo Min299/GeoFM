@@ -17,16 +17,29 @@ from geofm.models.peft.lora_layer import (
     LoRAConfig,
     apply_lora_to_linear,
 )
-from geofm.models.peft.lora_adapter import (
-    TerraMindLoRA,
-    inject_lora,
-    inject_lora_explicit,
-    freeze_all_except_lora,
-)
-from geofm.models.peft.hybrid_adapter import (
-    HybridAdapter,
-    LoRAFeatureHybrid,
-)
+
+# LoRA adapter (standalone LoRA implementation)
+try:
+    from geofm.models.peft.lora_adapter import (
+        LoRALinear as LoRALinearAdapter,
+        LoRAConv2d,
+        count_lora_parameters,
+    )
+except ImportError:
+    LoRALinearAdapter = None
+    LoRAConv2d = None
+    count_lora_parameters = None
+
+# Hybrid adapters
+try:
+    from geofm.models.peft.hybrid_adapter import (
+        HybridAdapter,
+        LoRAFeatureHybrid,
+    )
+except ImportError:
+    HybridAdapter = None
+    LoRAFeatureHybrid = None
+
 from geofm.models.peft.parameter_counter import (
     count_total_params,
     count_trainable_params,
@@ -44,7 +57,7 @@ from geofm.models.peft.parameter_counter import (
 )
 
 __all__ = [
-    # Feature adapters (existing)
+    # Feature adapters
     "FeatureAdapter",
     "TaskFeatureAdapter",
     "AdapterBank",
@@ -53,10 +66,9 @@ __all__ = [
     "LoRAConfig",
     "apply_lora_to_linear",
     # LoRA adapter
-    "TerraMindLoRA",
-    "inject_lora",
-    "inject_lora_explicit",
-    "freeze_all_except_lora",
+    "LoRALinearAdapter",
+    "LoRAConv2d",
+    "count_lora_parameters",
     # Hybrid
     "HybridAdapter",
     "LoRAFeatureHybrid",

@@ -1,232 +1,306 @@
 """geofm.models.peft.lora_adapter
 
-LoRA adapter for TerraMind backbone.
-
-Injects LoRA layers into the attention modules of a
-transformer model using explicit encoder traversal.
+LoRA (Low-Rank Adaptation) layer implementation.
+Replaces linear layers with low-rank decomposed adapters.
 """
-from typing import Optional
+from __future__ import annotations
+
+import math
+
+import torch
 import torch.nn as nn
-
-from .lora_layer import LoRALinear, LoRAConfig
-
-
-def inject_lora_explicit(
-    backbone,
-    rank: int = 16,
-    alpha: int = 16,
-    target_qkv: bool = True,
-    target_proj: bool = True,
-) -> int:
-    """Inject LoRA layers using explicit encoder traversal.
-
-    This is the preferred method as it explicitly targets the
-    transformer encoder blocks, avoiding ambiguity with generic
-    module traversal.
-
-    Args:
-        backbone: The TerraMindBackbone wrapper
-        rank: LoRA rank
-        alpha: LoRA alpha (scaling factor)
-        target_qkv: Whether to inject into QKV layers
-        target_proj: Whether to inject into projection layers
-
-    Returns:
-        Number of layers replaced
-    """
-    replaced = 0
-
-    # Get the inner TerraMindViT model
-    inner = backbone._model if hasattr(backbone, '_model') else backbone
-
-    # Explicitly traverse the encoder blocks
-    if not hasattr(inner, 'encoder'):
-        raise ValueError(f"Model {type(inner)} has no 'encoder' attribute")
-
-    encoder = inner.encoder
-
-    for block in encoder:
-        if target_qkv and hasattr(block, 'attn') and hasattr(block.attn, 'qkv'):
-            block.attn.qkv = LoRALinear(
-                block.attn.qkv,
-                rank=rank,
-                alpha=alpha,
-            )
-            replaced += 1
-
-        if target_proj and hasattr(block, 'attn') and hasattr(block.attn, 'proj'):
-            block.attn.proj = LoRALinear(
-                block.attn.proj,
-                rank=rank,
-                alpha=alpha,
-            )
-            replaced += 1
-
-    return replaced
+from typing import Optional
 
 
-def freeze_all_except_lora(model):
-    """Freeze all parameters except LoRA trainable parameters.
+class LoRALinear(nn.Module):
+    """LoRA-adapted linear layer.
 
-    Call this after LoRA injection to ensure only LoRA parameters
-    are trainable.
+    Replaces a base linear layer with:
+    - Frozen original weights
+    - Trainable low-rank decomposition (A @ B)
 
-    Args:
-        model: Model with LoRA layers injected
-    """
-    # First freeze everything
-    for p in model.parameters():
-        p.requires_grad = False
+    The adaptation is: y = Wx + (alpha/rank) * (B @ A) @ x
 
-    # Then unfreeze LoRA parameters
-    for module in model.modules():
-        if isinstance(module, LoRALinear):
-            module.lora_A.requires_grad = True
-            module.lora_B.requires_grad = True
-
-
-class TerraMindLoRA(nn.Module):
-    """LoRA adapter for TerraMind backbone.
-
-    Injects LoRA layers into QKV and projection layers
-    of all transformer blocks using explicit encoder traversal.
-
-    Usage:
-        # Load pretrained backbone
-        backbone = build_backbone("terramind_base")
-
-        # Apply LoRA with proper freezing
-        lora_model = TerraMindLoRA(
-            backbone,
-            rank=16,
-            alpha=16,
-            freeze_backbone=True,  # Recommended: freeze original weights
-        )
-
-        # Now only LoRA parameters are trainable
-        # Original weights remain frozen
+    Attributes:
+        base_layer: Original linear layer (frozen)
+        rank: LoRA rank (lower = fewer params)
+        alpha: Scaling factor
+        lora_A: Low-rank matrix A (rank x in_features)
+        lora_B: Low-rank matrix B (out_features x rank)
     """
 
     def __init__(
         self,
-        model: nn.Module,
+        base_layer: nn.Linear,
         rank: int = 16,
-        alpha: int = 16,
-        target_qkv: bool = True,
-        target_proj: bool = True,
-        freeze_backbone: bool = True,
+        alpha: int = 32,
+        dropout: float = 0.05,
     ):
+        """Initialize LoRA layer.
+
+        Args:
+            base_layer: Original linear layer to adapt
+            rank: LoRA rank (default: 16)
+            alpha: LoRA alpha scaling factor (default: 32)
+            dropout: Dropout probability for LoRA inputs (default: 0.05)
+        """
         super().__init__()
 
-        self.model = model
-
+        self.base_layer = base_layer
         self.rank = rank
         self.alpha = alpha
+        self.scaling = alpha / rank
+        self.dropout = nn.Dropout(dropout)
 
-        self.target_qkv = target_qkv
-        self.target_proj = target_proj
+        in_features = base_layer.in_features
+        out_features = base_layer.out_features
 
-        self._injected_layers = 0
+        # LoRA matrices
+        # A: initialized with kaiming uniform (like linear layer)
+        # B: initialized with zeros (so lora starts as identity)
+        self.lora_A = nn.Parameter(torch.zeros(rank, in_features))
+        self.lora_B = nn.Parameter(torch.zeros(out_features, rank))
 
-        # Inject LoRA using explicit traversal
-        self._injected_layers = inject_lora_explicit(
-            self.model,
+        # Initialize A with kaiming
+        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
+
+        # Initialize B with zeros
+        nn.init.zeros_(self.lora_B)
+
+        # Freeze base layer
+        for p in self.base_layer.parameters():
+            p.requires_grad = False
+
+        self.base_layer.weight.requires_grad = False
+        if self.base_layer.bias is not None:
+            self.base_layer.bias.requires_grad = False
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass with LoRA adaptation.
+
+        Args:
+            x: Input tensor (..., in_features)
+
+        Returns:
+            Output tensor (..., out_features)
+        """
+        # Base forward pass
+        base = self.base_layer(x)
+
+        # LoRA forward pass
+        # x -> (..., in_features)
+        # lora_A: (rank, in_features)
+        # lora_B: (out_features, rank)
+        # x @ lora_A.T: (..., rank)
+        # ... @ lora_B.T: (..., out_features)
+        x_drop = self.dropout(x)
+        lora = torch.matmul(
+            torch.matmul(x_drop, self.lora_A.t()), self.lora_B.t()
+        )
+
+        return base + self.scaling * lora
+
+    def merge(self) -> nn.Linear:
+        """Merge LoRA weights into base layer.
+
+        Creates a new linear layer with merged weights.
+        Useful for exporting or inference.
+
+        Returns:
+            Merged linear layer
+        """
+        # W_merged = W + (alpha/rank) * B @ A
+        merged_weight = self.base_layer.weight + self.scaling * (self.lora_B @ self.lora_A)
+
+        merged = nn.Linear(
+            self.base_layer.in_features,
+            self.base_layer.out_features,
+            bias=self.base_layer.bias is not None,
+        )
+        merged.weight = nn.Parameter(merged_weight)
+
+        if self.base_layer.bias is not None:
+            merged.bias = self.base_layer.bias
+
+        return merged
+
+    @staticmethod
+    def from_linear(
+        linear: nn.Linear,
+        rank: int = 16,
+        alpha: int = 32,
+        dropout: float = 0.05,
+    ) -> "LoRALinear":
+        """Create LoRA layer from standard linear layer.
+
+        Args:
+            linear: Original linear layer
+            rank: LoRA rank
+            alpha: LoRA alpha
+            dropout: Dropout probability
+
+        Returns:
+            LoRA-adapted layer
+        """
+        return LoRALinear(
+            base_layer=linear,
             rank=rank,
             alpha=alpha,
-            target_qkv=target_qkv,
-            target_proj=target_proj,
+            dropout=dropout,
         )
 
-        # Freeze backbone weights (only LoRA trainable)
-        if freeze_backbone:
-            freeze_all_except_lora(self.model)
 
-    def inject(self):
-        """Re-inject LoRA layers (clears and re-injects)."""
-        # Note: This replaces the old injection logic
-        # which used generic module traversal
-        self._injected_layers = inject_lora_explicit(
-            self.model,
-            rank=self.rank,
-            alpha=self.alpha,
-            target_qkv=self.target_qkv,
-            target_proj=self.target_proj,
+class LoRAConv2d(nn.Module):
+    """LoRA-adapted 2D convolution layer.
+
+    Similar to LoRALinear but for convolutions.
+    """
+
+    def __init__(
+        self,
+        base_layer: nn.Conv2d,
+        rank: int = 16,
+        alpha: int = 32,
+        dropout: float = 0.05,
+    ):
+        """Initialize LoRA Conv2d layer.
+
+        Args:
+            base_layer: Original conv2d layer to adapt
+            rank: LoRA rank
+            alpha: LoRA alpha scaling factor
+            dropout: Dropout probability
+        """
+        super().__init__()
+
+        self.base_layer = base_layer
+        self.rank = rank
+        self.alpha = alpha
+        self.scaling = alpha / rank
+        self.dropout = nn.Dropout(dropout)
+
+        in_channels = base_layer.in_channels
+        out_channels = base_layer.out_channels
+        kernel_size = base_layer.kernel_size
+
+        # Flatten spatial dimensions for low-rank adaptation
+        self.spatial_dims = kernel_size[0] * kernel_size[1]
+
+        # LoRA matrices
+        self.lora_A = nn.Parameter(
+            torch.zeros(rank, in_channels * self.spatial_dims)
+        )
+        self.lora_B = nn.Parameter(
+            torch.zeros(out_channels * self.spatial_dims, rank)
         )
 
-        # Re-freeze after re-injection
-        freeze_all_except_lora(self.model)
+        # Initialize
+        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
+        nn.init.zeros_(self.lora_B)
 
-    def forward(self, *args, **kwargs):
-        """Forward pass through the model."""
-        return self.model(*args, **kwargs)
+        # Freeze base layer
+        for p in self.base_layer.parameters():
+            p.requires_grad = False
 
-    def count_lora_layers(self) -> int:
-        """Count the number of LoRA layers injected."""
-        count = 0
-        for module in self.model.modules():
-            if isinstance(module, LoRALinear):
-                count += 1
-        return count
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass with LoRA adaptation.
 
-    def count_lora_params(self) -> int:
-        """Count total parameters in LoRA layers.
+        Args:
+            x: Input tensor (B, C, H, W)
 
         Returns:
-            Total number of LoRA parameters (lora_A + lora_B)
+            Output tensor (B, C', H', W')
         """
-        total = 0
-        for module in self.model.modules():
-            if isinstance(module, LoRALinear):
-                total += module.lora_A.numel() + module.lora_B.numel()
-        return total
+        # Base forward
+        base = self.base_layer(x)
 
-    def merge_weights(self):
-        """Merge LoRA weights into original layers."""
-        for module in self.model.modules():
-            if isinstance(module, LoRALinear):
-                module.merge()
-
-    def verify_frozen(self) -> bool:
-        """Verify only LoRA parameters are trainable.
-
-        Returns:
-            True if only LoRA params are trainable
-        """
-        for name, param in self.model.named_parameters():
-            if 'lora_A' in name or 'lora_B' in name:
-                if not param.requires_grad:
-                    return False
-            else:
-                # All other params should be frozen
-                if param.requires_grad:
-                    # Check if it's actually a LoRA param with different naming
-                    if not any(x in name for x in ['lora_A', 'lora_B']):
-                        return False
-        return True
-
-    def extra_repr(self) -> str:
-        return (
-            f"rank={self.rank}, alpha={self.alpha}, "
-            f"injected_layers={self._injected_layers}, "
-            f"lora_params={self.count_lora_params():,}"
+        # LoRA adaptation
+        # Unfold input
+        x_unfold = nn.functional.unfold(
+            x,
+            self.base_layer.kernel_size,
+            stride=self.base_layer.stride,
+            padding=self.base_layer.padding,
+            dilation=self.base_layer.dilation,
         )
+        # x_unfold: (B, C*k*k, H'*W')
+
+        # Apply LoRA
+        # x_unfold @ lora_A.T @ lora_B.T
+        lora = torch.matmul(
+            torch.matmul(x_unfold, self.lora_A.t()), self.lora_B.t()
+        )
+        # lora: (B, out_channels*k*k, H'*W')
+
+        # Reshape
+        lora = lora.view(
+            x.shape[0],
+            self.base_layer.out_channels,
+            self.spatial_dims,
+            -1,
+        )
+        lora = lora.sum(dim=2)  # Sum over spatial dims
+
+        return base + self.scaling * lora
 
 
-def inject_lora(
-    model: nn.Module,
-    config: LoRAConfig,
-) -> TerraMindLoRA:
-    """Inject LoRA into a model using a config.
+def count_lora_parameters(model: nn.Module) -> int:
+    """Count trainable LoRA parameters in model.
 
     Args:
-        model: The model to inject LoRA into
-        config: LoRA configuration
+        model: Model with LoRA layers
 
     Returns:
-        Model with LoRA injected
+        Number of trainable LoRA parameters
     """
-    return TerraMindLoRA(
-        model=model,
-        rank=config.rank,
-        alpha=config.alpha,
-    )
+    total = 0
+    for name, module in model.named_modules():
+        if isinstance(module, (LoRALinear, LoRAConv2d)):
+            total += module.lora_A.numel() + module.lora_B.numel()
+    return total
+
+
+def apply_lora_to_linear(
+    model: nn.Module,
+    target_names: list[str],
+    rank: int = 16,
+    alpha: int = 32,
+    dropout: float = 0.05,
+) -> None:
+    """Apply LoRA to all linear layers matching target names.
+
+    Args:
+        model: Model to modify
+        target_names: List of module name patterns to match
+        rank: LoRA rank
+        alpha: LoRA alpha
+        dropout: Dropout probability
+    """
+    for name, module in model.named_modules():
+        # Check if name matches any target
+        if not any(target in name for target in target_names):
+            continue
+
+        # Check if module is linear
+        if isinstance(module, nn.Linear):
+            # Create LoRA version
+            lora_layer = LoRALinear(
+                base_layer=module,
+                rank=rank,
+                alpha=alpha,
+                dropout=dropout,
+            )
+
+            # Replace in parent
+            parent_name, child_name = name.rsplit(".", 1)
+            parent = model.get_submodule(parent_name)
+            setattr(parent, child_name, lora_layer)
+
+
+# Re-export TerraMindLoRA for backward compatibility
+# This was moved from the original lora_adapter.py
+try:
+    from geofm.models.peft.lora_layer import TerraMindLoRA
+    __all__ = ['LoRALinear', 'LoRAConv2d', 'count_lora_parameters', 'apply_lora_to_linear', 'TerraMindLoRA']
+except ImportError:
+    __all__ = ['LoRALinear', 'LoRAConv2d', 'count_lora_parameters', 'apply_lora_to_linear']
