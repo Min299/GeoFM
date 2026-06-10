@@ -97,4 +97,9 @@ __all__ = [
     "MTBenchmark",
     "QuickMultiTaskBenchmark",
     "MultiTaskBenchmarkConfig",
+    # Phase 5E - Metadata Ablation
+    "MetadataDropper",
+    "MetadataMasker",
+    "MetadataAblation",
+    "benchmark_fusion",
 ]
