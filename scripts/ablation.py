@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""scripts/benchmark.py
+"""scripts/ablation.py
 
-Benchmark script for GeoFM.
+Ablation study script for GeoFM.
 
 Usage:
-    python scripts/benchmark.py --config configs/benchmark.yaml
+    python scripts/ablation.py --config configs/ablation.yaml
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from geofm.config.config_loader import ConfigLoader
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description="Benchmark GeoFM model")
+    parser = argparse.ArgumentParser(description="Run GeoFM ablation study")
 
     parser.add_argument(
         "--config",
@@ -32,7 +32,7 @@ def main():
 
     cfg = ConfigLoader.load(args.config)
 
-    print("Benchmark started:")
+    print("Ablation started:")
     print(cfg)
 
 

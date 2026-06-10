@@ -5,6 +5,10 @@ Training utilities for multi-task learning.
 Includes:
 - multitask_step: Core training step
 - multitask_trainer: Multi-task training loop
+- epoch_runner: Epoch-level training and validation
+- fit: High-level training loop with history tracking
+- validate: Validation utilities
+- predict: Prediction utilities
 """
 from geofm.training.multitask_step import (
     multitask_step,
@@ -21,6 +25,22 @@ from geofm.training.multitask_trainer import (
     EpochMetrics,
 )
 
+from geofm.training.epoch_runner import (
+    EpochRunner,
+)
+
+from geofm.training.fit import (
+    fit,
+)
+
+from geofm.training.validate import (
+    validate,
+)
+
+from geofm.training.predict import (
+    predict,
+)
+
 
 __all__ = [
     # Step functions
@@ -35,4 +55,9 @@ __all__ = [
     # Metrics
     "TrainingMetrics",
     "EpochMetrics",
+    # Epoch-level
+    "EpochRunner",
+    "fit",
+    "validate",
+    "predict",
 ]
