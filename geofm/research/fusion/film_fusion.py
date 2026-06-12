@@ -1,4 +1,4 @@
-"""geofm.models.fusion.film_fusion
+"""geofm.research.fusion.film_fusion
 
 FiLM (Feature-wise Linear Modulation) fusion.
 """
@@ -7,7 +7,7 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
-from geofm.models.fusion.base_fusion import (
+from geofm.research.fusion.base_fusion import (
     BaseFusion,
 )
 

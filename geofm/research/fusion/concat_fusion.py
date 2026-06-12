@@ -1,4 +1,4 @@
-"""geofm.models.fusion.concat_fusion
+"""geofm.research.fusion.concat_fusion
 
 Concatenation-based fusion.
 """
@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import torch
 
-from geofm.models.fusion.base_fusion import (
+from geofm.research.fusion.base_fusion import (
     BaseFusion,
 )
 

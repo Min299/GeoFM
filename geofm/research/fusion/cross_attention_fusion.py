@@ -1,4 +1,4 @@
-"""geofm.models.fusion.cross_attention_fusion
+"""geofm.research.fusion.cross_attention_fusion
 
 Cross-attention based fusion.
 """
@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import torch.nn as nn
 
-from geofm.models.fusion.base_fusion import (
+from geofm.research.fusion.base_fusion import (
     BaseFusion,
 )
 

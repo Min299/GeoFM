@@ -1,4 +1,4 @@
-"""geofm.models.fusion.base_fusion
+"""geofm.research.fusion.base_fusion
 
 Base class for fusion modules.
 """

@@ -4,15 +4,15 @@ Builder for fusion modules.
 """
 from __future__ import annotations
 
-from geofm.models.fusion.concat_fusion import (
+from geofm.research.fusion.concat_fusion import (
     ConcatFusion,
 )
 
-from geofm.models.fusion.film_fusion import (
+from geofm.research.fusion.film_fusion import (
     FiLMFusion,
 )
 
-from geofm.models.fusion.cross_attention_fusion import (
+from geofm.research.fusion.cross_attention_fusion import (
     CrossAttentionFusion,
 )
 
