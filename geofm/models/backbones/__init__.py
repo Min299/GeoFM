@@ -14,10 +14,12 @@ from geofm.models.backbones.terramind_factory import (
     TERRAMIND_VARIANTS,
 )
 from geofm.models.backbones.terramind_backbone import TerraMindBackbone
+from geofm.models.backbones.terramind_wrapper import TerraMindWrapper
 
 __all__ = [
     # Core backbone
     "TerraMindBackbone",
+    "TerraMindWrapper",
     # Factory
     "build_backbone",
     "list_available_backbones",
