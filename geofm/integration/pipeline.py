@@ -4,45 +4,55 @@ GeoFM end-to-end pipeline.
 """
 from __future__ import annotations
 
+from geofm.integration.runtime import (
+    Runtime,
+)
+
 
 class GeoFMPipeline:
-    """End-to-end pipeline for GeoFM inference."""
+    """Single orchestration object for GeoFM.
+
+    Wraps Runtime for config-driven training.
+
+    Usage:
+        pipeline = GeoFMPipeline(cfg)
+        history = pipeline.train(train_loader, val_loader, optimizer, criterion)
+    """
 
     def __init__(
         self,
-        model,
-        fusion=None,
-        metadata_encoder=None,
+        cfg,
     ):
-        """Initialize pipeline.
+        """Initialize pipeline with config.
 
         Args:
-            model: Core GeoFM model
-            fusion: Optional fusion module
-            metadata_encoder: Optional metadata encoder
+            cfg: Configuration object
         """
-        self.model = model
-
-        self.fusion = fusion
-
-        self.metadata_encoder = (
-            metadata_encoder
+        self.runtime = Runtime(
+            cfg
         )
 
-    def forward(
+    def train(
         self,
-        image,
-        metadata=None,
+        train_loader,
+        val_loader,
+        optimizer,
+        criterion,
     ):
-        """Run forward pass through pipeline.
+        """Run training.
 
         Args:
-            image: Input image tensor
-            metadata: Optional metadata dict
+            train_loader: Training data loader
+            val_loader: Validation data loader
+            optimizer: Optimizer
+            criterion: Loss criterion
 
         Returns:
-            Model output
+            Training history dict
         """
-        return self.model(
-            image
+        return self.runtime.train(
+            train_loader,
+            val_loader,
+            optimizer,
+            criterion,
         )

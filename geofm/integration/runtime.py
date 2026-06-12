@@ -4,8 +4,8 @@ GeoFM training runtime.
 """
 from __future__ import annotations
 
-from geofm.integration.model_factory import (
-    ModelFactory,
+from geofm.builders.model_builder import (
+    ModelBuilder,
 )
 
 from geofm.training.fit import (
@@ -31,7 +31,17 @@ class Runtime:
         """
         self.cfg = cfg
 
-    def run(
+    def build_model(self):
+        """Build model from config.
+
+        Returns:
+            Assembled model
+        """
+        return ModelBuilder.build(
+            self.cfg
+        )
+
+    def train(
         self,
         train_loader,
         val_loader,
@@ -50,17 +60,13 @@ class Runtime:
             Training history dict
         """
         model = (
-            ModelFactory.build(
-                self.cfg
-            )
+            self.build_model()
         )
 
-        runner = (
-            EpochRunner(
-                model,
-                optimizer,
-                criterion,
-            )
+        runner = EpochRunner(
+            model=model,
+            optimizer=optimizer,
+            criterion=criterion,
         )
 
         return fit(

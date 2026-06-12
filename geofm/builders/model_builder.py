@@ -1,78 +1,88 @@
 """geofm.builders.model_builder
 
-Builder for creating GeoFM models.
+Central constructor for GeoFM models from config.
 """
 from __future__ import annotations
 
-import torch.nn as nn
+from geofm.models.backbones.backbone_factory import (
+    build_backbone,
+)
 
-from geofm.models.multitask.shared_geofm import SharedGeoFM
+from geofm.models.backbones.terramind_wrapper import (
+    TerraMindWrapper,
+)
+
+from geofm.models.tasks.segmentation_model import (
+    SegmentationModel,
+)
+
+from geofm.models.tasks.classification_model import (
+    ClassificationModel,
+)
 
 
 class ModelBuilder:
-    """Builder for creating GeoFM models.
+    """Central constructor for GeoFM models.
+
+    Builds complete model from config:
+        - Backbone (TerraMind)
+        - Task head (segmentation/classification)
 
     Usage:
-        builder = ModelBuilder()
-        model = builder.build_shared_model(backbone, adapter_bank, decoder_bank)
+        model = ModelBuilder.build(cfg)
     """
 
-    def __init__(self):
-        """Initialize model builder."""
-        pass
-
-    def build_shared_model(
-        self,
-        backbone: nn.Module,
-        adapter_bank: nn.Module,
-        decoder_bank: nn.Module,
-    ) -> SharedGeoFM:
-        """Build a shared GeoFM model.
+    @staticmethod
+    def build(
+        cfg,
+    ):
+        """Build model from config.
 
         Args:
-            backbone: Backbone encoder module
-            adapter_bank: Bank of task adapters
-            decoder_bank: Bank of task decoders
+            cfg: Configuration object with model, task, decoder/classifier specs
 
         Returns:
-            SharedGeoFM model
+            Assembled model ready for training
         """
-        return SharedGeoFM(
-            backbone=backbone,
-            adapter_bank=adapter_bank,
-            decoder_bank=decoder_bank,
+        # Build backbone
+        backbone = build_backbone(
+            cfg.model.backbone,
+            pretrained=cfg.model.pretrained,
         )
 
-    def build_from_config(self, config) -> SharedGeoFM:
-        """Build model from experiment config.
+        # Wrap with TerraMind wrapper for feature extraction
+        backbone = TerraMindWrapper(
+            backbone=backbone,
+        )
 
-        Args:
-            config: ExperimentConfig object
+        task = cfg.task.name
 
-        Returns:
-            SharedGeoFM model
+        if task == "segmentation":
 
-        Raises:
-            NotImplementedError: Full config building not yet implemented
-        """
-        raise NotImplementedError("Config-based model building pending.")
+            decoder = (
+                cfg.decoder.instance
+            )
 
-    def get_model_info(self, model: nn.Module) -> dict:
-        """Get information about a model.
+            return (
+                SegmentationModel(
+                    backbone,
+                    decoder,
+                )
+            )
 
-        Args:
-            model: PyTorch model
+        if task == "classification":
 
-        Returns:
-            Dictionary with model information
-        """
-        from geofm.utils.model_stats import get_model_summary
+            classifier = (
+                cfg.classifier.instance
+            )
 
-        summary = get_model_summary(model)
+            return (
+                ClassificationModel(
+                    backbone,
+                    classifier,
+                )
+            )
 
-        return {
-            "total_parameters": summary["total_parameters"],
-            "trainable_parameters": summary["trainable_parameters"],
-            "frozen_parameters": summary["frozen_parameters"],
-            "trainable_percentage": summary["trainable_percentage"],
-        }
+        raise ValueError(
+            f"Unknown task: {task}"
+        )

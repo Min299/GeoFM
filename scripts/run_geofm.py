@@ -9,6 +9,10 @@ from geofm.config.config_loader import (
     ConfigLoader,
 )
 
+from geofm.integration.pipeline import (
+    GeoFMPipeline,
+)
+
 
 def main():
     """Main entrypoint for GeoFM."""
@@ -37,11 +41,13 @@ def main():
         args.config
     )
 
+    pipeline = GeoFMPipeline(cfg)
+
     print(
-        "GeoFM Runtime"
+        "GeoFM initialized."
     )
 
-    print(cfg)
+    return pipeline
 
 
 if __name__ == "__main__":
