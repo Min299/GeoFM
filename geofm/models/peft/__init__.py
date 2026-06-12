@@ -6,6 +6,7 @@ Includes:
 - LoRA (Low-Rank Adaptation) for attention layers
 - Feature Adapters for multi-scale feature processing
 - Hybrid adapters combining multiple techniques
+- PEFT wrappers for easy strategy selection
 """
 from geofm.models.peft.feature_adapter import FeatureAdapter
 from geofm.models.peft.task_feature_adapter import TaskFeatureAdapter
@@ -59,6 +60,17 @@ from geofm.models.peft.parameter_counter import (
     ParameterCounter,
 )
 
+# PEFT wrappers
+from geofm.models.peft.lora_wrapper import (
+    LoRAWrapper,
+)
+from geofm.models.peft.adapter_wrapper import (
+    AdapterWrapper,
+)
+from geofm.models.peft.peft_factory import (
+    PEFTFactory,
+)
+
 __all__ = [
     # Feature adapters
     "FeatureAdapter",
@@ -91,4 +103,8 @@ __all__ = [
     "verify_lora_only_trainable",
     "summary",
     "ParameterCounter",
+    # PEFT wrappers
+    "LoRAWrapper",
+    "AdapterWrapper",
+    "PEFTFactory",
 ]
