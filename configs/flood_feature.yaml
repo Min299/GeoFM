@@ -1,0 +1,27 @@
+# Flood Feature Adapter Experiment Configuration
+# Phase 5B - Single Task Training
+
+task: flood
+adapter: feature
+
+# Training parameters
+epochs: 10
+batch_size: 8
+lr: 1e-4
+
+# Optimizer
+optimizer: adamw
+weight_decay: 0.01
+
+# Model
+backbone: terramind_base
+feature_dim: 768
+bottleneck_dim: 64
+
+# Loss
+loss_type: cross_entropy
+dice_weight: 0.5
+
+# Validation
+val_interval: 1
+save_interval: 5

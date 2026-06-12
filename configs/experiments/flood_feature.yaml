@@ -1,0 +1,35 @@
+# Flood Feature Adapter Experiment Configuration
+experiment_name: flood_feature
+task: flood
+
+# Adapter Configuration
+adapter_type: feature
+
+# Backbone Configuration
+backbone:
+  name: terramind_base
+  frozen: true
+
+# Decoder Configuration
+decoder:
+  name: flood_decoder
+
+# Training Configuration
+training:
+  batch_size: 8
+  epochs: 20
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  optimizer: adamw
+
+# Loss Configuration
+loss:
+  name: dice
+
+# Evaluation Configuration
+evaluation:
+  metrics:
+    - iou
+    - dice
+    - f1
+  save_predictions: false

@@ -1,0 +1,35 @@
+# Flood Full Fine-Tuning Experiment Configuration
+# Phase 5C - Full fine-tuning benchmark
+
+experiment_name: fullft
+task: flood
+
+# Model configuration
+model:
+  adapter_type: none
+  feature_dim: 768
+  freeze_backbone: false
+
+# Training configuration
+training:
+  epochs: 10
+  batch_size: 8
+  learning_rate: 1.0e-5
+  weight_decay: 0.01
+  optimizer: adam
+
+# Data configuration
+data:
+  num_samples: 100
+  image_size: 256
+  num_classes: 2
+
+# Output configuration
+output:
+  output_dir: results/fullft
+  save_checkpoints: true
+  checkpoint_interval: 5
+  save_best: true
+
+# Device configuration
+device: cuda

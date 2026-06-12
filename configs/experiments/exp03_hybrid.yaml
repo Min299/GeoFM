@@ -1,0 +1,32 @@
+# Experiment 03: Hybrid Adaptation
+# Combined LoRA + Feature Adapter
+
+name: exp03_hybrid
+task: flood
+adaptation: hybrid
+backbone: terramind_base
+decoder: default
+
+batch_size: 8
+lr: 1e-4
+weight_decay: 1e-4
+max_epochs: 50
+seed: 42
+
+# Hybrid config (LoRA + Feature)
+lora:
+  rank: 16
+  alpha: 16
+  target_qkv: true
+  target_proj: true
+
+feature_adapter:
+  rank: 64
+  dropout: 0.1
+
+# Data config
+data:
+  dataset: sentinel2
+  image_size: 224
+  num_workers: 4
+  augmentation: true

@@ -1,0 +1,29 @@
+# Experiment 02: LoRA Adaptation
+# Low-rank adaptation of attention layers
+
+name: exp02_lora
+task: flood
+adaptation: lora
+backbone: terramind_base
+decoder: default
+
+batch_size: 8
+lr: 1e-4
+weight_decay: 1e-4
+max_epochs: 50
+seed: 42
+
+# LoRA config
+lora:
+  rank: 16
+  alpha: 16
+  target_qkv: true
+  target_proj: true
+  dropout: 0.0
+
+# Data config
+data:
+  dataset: sentinel2
+  image_size: 224
+  num_workers: 4
+  augmentation: true

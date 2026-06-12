@@ -1,0 +1,39 @@
+# Multi-Task Hybrid Configuration
+# Phase 5D - Multi-Task Learning
+
+experiment_name: multitask_hybrid
+adapter_type: hybrid
+
+# Tasks for multi-task learning
+tasks:
+  - flood
+  - burn
+  - lulc
+  - crop
+  - ndvi
+
+# Training configuration
+training:
+  epochs: 10
+  steps_per_epoch: 100
+  batch_size: 8
+  learning_rate: 1.0e-4
+  weight_decay: 0.01
+  clip_grad: 1.0
+
+# Model configuration
+model:
+  feature_dim: 768
+  bottleneck_dim: 64
+  lora_rank: 16
+  lora_alpha: 32
+  freeze_backbone: true
+
+# Output configuration
+output:
+  output_dir: results/multitask_hybrid
+  save_checkpoints: true
+  checkpoint_interval: 5
+
+# Device configuration
+device: cuda

@@ -1,23 +1,60 @@
 """geofm.metadata.metadata_encoder
 
-Cyclic (sin/cos) encoding of latitude, longitude, and day-of-year.
-Pure preprocessing -- no learnable parameters.
+Converts metadata dictionary into tensor representation.
 """
-import numpy as np
+from __future__ import annotations
+
+import torch
 
 
 class MetadataEncoder:
-    @staticmethod
-    def encode(lat, lon, day):
-        lat_rad = np.radians(lat)
-        lon_rad = np.radians(lon)
-        day_angle = 2 * np.pi * day / 365
+    """
+    Converts metadata dictionary
+    into tensor representation.
+    """
 
-        return {
-            "lat_sin": np.sin(lat_rad),
-            "lat_cos": np.cos(lat_rad),
-            "lon_sin": np.sin(lon_rad),
-            "lon_cos": np.cos(lon_rad),
-            "day_sin": np.sin(day_angle),
-            "day_cos": np.cos(day_angle),
-        }
+    def encode(
+        self,
+        metadata: dict,
+    ):
+        """Encode metadata dict as float tensor.
+
+        Args:
+            metadata: Dictionary with metadata fields
+
+        Returns:
+            torch.Tensor of encoded values
+        """
+        values = []
+
+        values.append(
+            float(
+                metadata.get(
+                    "latitude",
+                    0.0,
+                )
+            )
+        )
+
+        values.append(
+            float(
+                metadata.get(
+                    "longitude",
+                    0.0,
+                )
+            )
+        )
+
+        values.append(
+            float(
+                metadata.get(
+                    "resolution",
+                    0.0,
+                )
+            )
+        )
+
+        return torch.tensor(
+            values,
+            dtype=torch.float32,
+        )
